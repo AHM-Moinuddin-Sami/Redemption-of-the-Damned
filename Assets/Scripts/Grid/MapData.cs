@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /*
@@ -17,10 +18,16 @@ using UnityEngine;
  * - place and move actors
  * - place and remove map features
  * - place and remove items
+ * - provide item pile lookup methods
  *
  * Important:
  * MapData is the gameplay source of truth.
  * Unity Tilemaps are only visual.
+ *
+ * This version adds GetItemsAt(), which returns a copied list of items on a tile.
+ * That matters because pickup can destroy/remove items while looping. If we looped
+ * directly over the cell's internal item list, removing items during the loop
+ * could cause skipped items or collection modification issues.
  */
 
 public class MapData
@@ -37,6 +44,8 @@ public class MapData
 
         cells = new MapCell[width, height];
 
+        // Create every cell as Empty first.
+        // The generator later carves Floor cells and builds Wall cells.
         for (int x = 0; x < width; x++)
         {
             for (int y = 0; y < height; y++)
@@ -97,6 +106,8 @@ public class MapData
             return false;
         }
 
+        // A cell is walkable if terrain allows movement, no actor is there,
+        // and no blocking feature is there.
         return !cell.BlocksMovement &&
                !cell.HasActor &&
                !cell.HasBlockingFeature;
@@ -136,6 +147,32 @@ public class MapData
         }
 
         return cell.GetTopItem();
+    }
+
+    public List<ItemGridEntity> GetItemsAt(Vector2Int position)
+    {
+        List<ItemGridEntity> copiedItems = new List<ItemGridEntity>();
+
+        MapCell cell = GetCell(position);
+
+        if (cell == null)
+        {
+            return copiedItems;
+        }
+
+        IReadOnlyList<ItemGridEntity> cellItems = cell.Items;
+
+        for (int i = 0; i < cellItems.Count; i++)
+        {
+            if (cellItems[i] == null)
+            {
+                continue;
+            }
+
+            copiedItems.Add(cellItems[i]);
+        }
+
+        return copiedItems;
     }
 
     public bool TryPlaceActor(ActorGridEntity actor, Vector2Int position)
@@ -307,5 +344,64 @@ public class MapData
 
         cell.RemoveItem(item);
         return true;
+    }
+
+    public bool IsPathableForActor(Vector2Int position, Vector2Int goalPosition)
+    {
+        MapCell cell = GetCell(position);
+
+        if (cell == null)
+        {
+            return false;
+        }
+
+        // Terrain still blocks pathing.
+        if (cell.BlocksMovement)
+        {
+            return false;
+        }
+
+        // Closed doors and future blocking features block pathing.
+        if (cell.HasBlockingFeature)
+        {
+            return false;
+        }
+
+        // The goal position is allowed even if it has the player standing on it.
+        // This lets enemies path toward the player.
+        if (position == goalPosition)
+        {
+            return true;
+        }
+
+        // Other occupied actor cells block pathing.
+        if (cell.HasActor)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public bool BlocksSight(Vector2Int position)
+    {
+        MapCell cell = GetCell(position);
+
+        if (cell == null)
+        {
+            return true;
+        }
+
+        if (cell.BlocksSight)
+        {
+            return true;
+        }
+
+        if (cell.HasBlockingSightFeature)
+        {
+            return true;
+        }
+
+        return false;
     }
 }

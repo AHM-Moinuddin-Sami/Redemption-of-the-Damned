@@ -14,19 +14,18 @@ using UnityEngine;
  * 5. If no rooms are created, create one fallback room.
  * 6. Connect each room to the previous room with an L-shaped corridor.
  * 7. Convert Empty cells beside floors into Wall cells.
- * 8. Choose player spawn, stairs spawn, enemy spawns, and item spawns.
+ * 8. Choose player spawn, stairs spawn, enemy spawns, item spawns, and door spawns.
  * 9. Return a GenerationResult containing the map and useful positions.
  *
+ * Door generation:
+ * Doors are currently placed on narrow floor chokepoints.
+ * A horizontal doorway candidate has floor left/right and wall up/down.
+ * A vertical doorway candidate has floor up/down and wall left/right.
+ *
+ * Important:
  * This is still a foundation generator.
- * Later, this script can be expanded with:
- * - biome/theme generation
- * - room types
- * - room feature placement
- * - loot tables
- * - enemy spawn tables
- * - boss rooms
- * - faction-controlled rooms
- * - map validation
+ * Later, door placement should become room-aware so doors appear specifically
+ * at room entrances instead of any valid chokepoint.
  */
 
 public class DungeonGenerator : MonoBehaviour
@@ -43,6 +42,7 @@ public class DungeonGenerator : MonoBehaviour
     [Header("Temporary Spawning")]
     [SerializeField] private int maxEnemySpawnPositions = 5;
     [SerializeField] private int maxItemSpawnPositions = 6;
+    [SerializeField] private int maxDoorSpawnPositions = 12;
 
     [Header("Seed")]
     [SerializeField] private bool useRandomSeed = true;
@@ -73,14 +73,23 @@ public class DungeonGenerator : MonoBehaviour
         Vector2Int stairsDownPosition = CreateStairsDownPosition(mapData, playerSpawnPosition);
 
         List<Vector2Int> enemySpawnPositions = CreateEnemySpawnPositions();
-        List<Vector2Int> itemSpawnPositions = CreateItemSpawnPositions(mapData, random, playerSpawnPosition, stairsDownPosition, enemySpawnPositions);
+        List<Vector2Int> doorSpawnPositions = CreateDoorSpawnPositions(mapData, random, playerSpawnPosition, stairsDownPosition);
+        List<Vector2Int> itemSpawnPositions = CreateItemSpawnPositions(
+            mapData,
+            random,
+            playerSpawnPosition,
+            stairsDownPosition,
+            enemySpawnPositions,
+            doorSpawnPositions
+        );
 
         return new GenerationResult(
             mapData,
             playerSpawnPosition,
             stairsDownPosition,
             enemySpawnPositions,
-            itemSpawnPositions
+            itemSpawnPositions,
+            doorSpawnPositions
         );
     }
 
@@ -169,12 +178,115 @@ public class DungeonGenerator : MonoBehaviour
         return spawnPositions;
     }
 
+    private List<Vector2Int> CreateDoorSpawnPositions(
+        MapData mapData,
+        System.Random random,
+        Vector2Int playerSpawnPosition,
+        Vector2Int stairsDownPosition)
+    {
+        List<Vector2Int> candidates = new List<Vector2Int>();
+
+        for (int x = 1; x < mapData.Width - 1; x++)
+        {
+            for (int y = 1; y < mapData.Height - 1; y++)
+            {
+                Vector2Int position = new Vector2Int(x, y);
+
+                if (position == playerSpawnPosition || position == stairsDownPosition)
+                {
+                    continue;
+                }
+
+                if (!mapData.IsTerrainWalkable(position))
+                {
+                    continue;
+                }
+
+                if (IsDoorCandidate(mapData, position))
+                {
+                    candidates.Add(position);
+                }
+            }
+        }
+
+        Shuffle(candidates, random);
+
+        List<Vector2Int> doorPositions = new List<Vector2Int>();
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (doorPositions.Count >= maxDoorSpawnPositions)
+            {
+                break;
+            }
+
+            // Avoid placing doors directly next to each other.
+            if (IsNearExistingDoor(candidates[i], doorPositions))
+            {
+                continue;
+            }
+
+            doorPositions.Add(candidates[i]);
+        }
+
+        return doorPositions;
+    }
+
+    private bool IsDoorCandidate(MapData mapData, Vector2Int position)
+    {
+        bool floorLeft = IsFloor(mapData, position + Vector2Int.left);
+        bool floorRight = IsFloor(mapData, position + Vector2Int.right);
+        bool floorUp = IsFloor(mapData, position + Vector2Int.up);
+        bool floorDown = IsFloor(mapData, position + Vector2Int.down);
+
+        bool wallLeft = IsWall(mapData, position + Vector2Int.left);
+        bool wallRight = IsWall(mapData, position + Vector2Int.right);
+        bool wallUp = IsWall(mapData, position + Vector2Int.up);
+        bool wallDown = IsWall(mapData, position + Vector2Int.down);
+
+        bool horizontalDoorway = floorLeft && floorRight && wallUp && wallDown;
+        bool verticalDoorway = floorUp && floorDown && wallLeft && wallRight;
+
+        return horizontalDoorway || verticalDoorway;
+    }
+
+    private bool IsNearExistingDoor(Vector2Int candidatePosition, List<Vector2Int> existingDoors)
+    {
+        for (int i = 0; i < existingDoors.Count; i++)
+        {
+            int distance = Mathf.Abs(candidatePosition.x - existingDoors[i].x) +
+                           Mathf.Abs(candidatePosition.y - existingDoors[i].y);
+
+            if (distance <= 2)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsFloor(MapData mapData, Vector2Int position)
+    {
+        MapCell cell = mapData.GetCell(position);
+
+        return cell != null && cell.Terrain == CellTerrain.Floor;
+    }
+
+    private bool IsWall(MapData mapData, Vector2Int position)
+    {
+        MapCell cell = mapData.GetCell(position);
+
+        return cell != null && cell.Terrain == CellTerrain.Wall;
+    }
+
     private List<Vector2Int> CreateItemSpawnPositions(
         MapData mapData,
         System.Random random,
         Vector2Int playerSpawnPosition,
         Vector2Int stairsDownPosition,
-        List<Vector2Int> enemySpawnPositions)
+        List<Vector2Int> enemySpawnPositions,
+        List<Vector2Int> doorSpawnPositions)
     {
         List<Vector2Int> itemSpawnPositions = new List<Vector2Int>();
 
@@ -209,7 +321,17 @@ public class DungeonGenerator : MonoBehaviour
                 continue;
             }
 
-            if (enemySpawnPositions.Contains(candidatePosition) || itemSpawnPositions.Contains(candidatePosition))
+            if (enemySpawnPositions.Contains(candidatePosition))
+            {
+                continue;
+            }
+
+            if (doorSpawnPositions.Contains(candidatePosition))
+            {
+                continue;
+            }
+
+            if (itemSpawnPositions.Contains(candidatePosition))
             {
                 continue;
             }
@@ -341,6 +463,18 @@ public class DungeonGenerator : MonoBehaviour
         }
 
         return false;
+    }
+
+    private void Shuffle(List<Vector2Int> positions, System.Random random)
+    {
+        for (int i = positions.Count - 1; i > 0; i--)
+        {
+            int swapIndex = random.Next(0, i + 1);
+
+            Vector2Int temporary = positions[i];
+            positions[i] = positions[swapIndex];
+            positions[swapIndex] = temporary;
+        }
     }
 
     private Vector2Int GetRoomCenter(RectInt room)

@@ -11,26 +11,18 @@ using UnityEngine;
  * - chests
  * - traps
  * - shrines
- * - interactable dungeon objects
  *
- * This is different from ActorGridEntity.
- * Actors are creatures that take turns and occupy actor slots.
- * Features are map objects that may or may not block movement.
+ * This version supports both movement blocking and sight blocking.
+ * This matters because a closed door should block movement and vision, while an
+ * open door should block neither.
  *
  * Main responsibilities:
- * - store the feature's grid position
+ * - store the feature's display name
+ * - store whether the feature blocks movement
+ * - store whether the feature blocks sight
  * - register the feature into MapData
- * - snap the feature visual to the center of its grid cell
- * - clear the feature from MapData when destroyed
- *
- * Current usage:
- * - StairsDownFeature uses this base class to exist on the map.
- *
- * Later this can support:
- * - doors that block movement
- * - chests that do not block movement
- * - traps that trigger when stepped on
- * - shrines that can be interacted with
+ * - snap the feature visual to the grid
+ * - clear itself from MapData when destroyed
  */
 
 public class MapFeatureEntity : MonoBehaviour
@@ -38,6 +30,7 @@ public class MapFeatureEntity : MonoBehaviour
     [Header("Feature Info")]
     [SerializeField] private string displayName = "Feature";
     [SerializeField] private bool blocksMovement = false;
+    [SerializeField] private bool blocksSight = false;
 
     public string DisplayName
     {
@@ -52,6 +45,14 @@ public class MapFeatureEntity : MonoBehaviour
         get
         {
             return blocksMovement;
+        }
+    }
+
+    public bool BlocksSight
+    {
+        get
+        {
+            return blocksSight;
         }
     }
 
@@ -71,7 +72,6 @@ public class MapFeatureEntity : MonoBehaviour
         mapData = newMapData;
         mapRenderer = newMapRenderer;
 
-        // Register this feature into the map's feature occupancy data.
         if (!mapData.TryPlaceFeature(this, startPosition))
         {
             Debug.LogError(displayName + " could not be placed at " + startPosition);
@@ -84,6 +84,16 @@ public class MapFeatureEntity : MonoBehaviour
         SnapToGridPosition();
 
         return true;
+    }
+
+    public void SetBlocksMovement(bool value)
+    {
+        blocksMovement = value;
+    }
+
+    public void SetBlocksSight(bool value)
+    {
+        blocksSight = value;
     }
 
     public void ClearFromMap()
@@ -105,7 +115,6 @@ public class MapFeatureEntity : MonoBehaviour
     {
         Vector3 worldPosition = mapRenderer.GetCellCenterWorld(GridPosition);
 
-        // Preserve Z position so feature sorting/depth stays controlled by prefab setup.
         worldPosition.z = transform.position.z;
 
         transform.position = worldPosition;

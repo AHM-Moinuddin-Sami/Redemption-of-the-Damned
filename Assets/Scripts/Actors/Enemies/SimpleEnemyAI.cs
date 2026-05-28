@@ -4,45 +4,78 @@ using UnityEngine;
 /*
  * SimpleEnemyAI
  * -------------
- * Gives a basic enemy one turn of behavior whenever the TurnManager asks it to act.
+ * Gives a basic enemy one turn of behavior whenever TurnManager asks it to act.
+ *
+ * This version supports:
+ * - line-of-sight player detection
+ * - chasing the player while visible
+ * - remembering the player's last known position
+ * - giving up after losing sight for several turns
+ * - wandering while unaware
  *
  * Current enemy behavior:
- * - If the player is adjacent, attack the player.
- * - If the player is within detection range, move one tile toward the player.
- * - If blocked, try the secondary direction.
- * - If still blocked, do nothing.
- *
- * This is intentionally simple. It is not proper pathfinding yet.
+ * 1. If adjacent to the player, attack.
+ * 2. If the player is within detection range and line of sight, become aware.
+ * 3. If aware, chase the player or last known player position.
+ * 4. If unaware, randomly wander near the enemy's starting position.
  *
  * Main responsibilities:
- * - store a reference to MapData
- * - store a reference to the player actor
- * - decide whether to attack, move, or wait
- * - use ActorGridEntity for movement
- * - use ActorCombat for attacking
+ * - detect the player fairly using range and line of sight
+ * - path toward the player or last known player position
+ * - wander when idle
+ * - avoid walking into walls, closed doors, blocking features, and other actors
+ *
+ * Important:
+ * Closed doors block enemy sight and pathing.
+ * Enemies do not open doors yet.
  *
  * Later this can expand into:
- * - pathfinding
- * - field of view checks
- * - faction behavior
- * - fleeing
+ * - proper patrol routes
+ * - enemies opening doors
+ * - sound-based investigation
+ * - group alerting
  * - ranged attacks
- * - ability usage
- * - patrol/wander behavior
- * - different AI profiles per enemy type
+ * - fleeing
+ * - faction behavior
+ * - stealth/sneaking
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
 [RequireComponent(typeof(ActorCombat))]
 public class SimpleEnemyAI : MonoBehaviour
 {
-    [Header("AI Settings")]
+    [Header("Detection")]
     [SerializeField] private int detectionRange = 10;
+    [SerializeField] private int chaseTurnsAfterLosingSight = 4;
+
+    [Header("Wandering")]
+    [SerializeField] private bool canWanderWhileUnaware = true;
+    [SerializeField] private int wanderChancePercent = 45;
+    [SerializeField] private int maxWanderDistanceFromHome = 6;
+    [SerializeField] private int wanderDirectionAttempts = 4;
+
+    [Header("Debug")]
+    [SerializeField] private bool printAwarenessDebug;
+
+    private readonly Vector2Int[] cardinalDirections =
+    {
+        Vector2Int.up,
+        Vector2Int.down,
+        Vector2Int.left,
+        Vector2Int.right
+    };
 
     private MapData mapData;
     private ActorGridEntity actorGridEntity;
     private ActorCombat actorCombat;
     private ActorGridEntity playerActor;
+
+    private Vector2Int homePosition;
+    private Vector2Int lastKnownPlayerPosition;
+
+    private int turnsSincePlayerSeen;
+    private bool hasLastKnownPlayerPosition;
+    private bool isAware;
     private bool isInitialized;
 
     private void Awake()
@@ -55,6 +88,14 @@ public class SimpleEnemyAI : MonoBehaviour
     {
         mapData = newMapData;
         playerActor = newPlayerActor;
+
+        homePosition = actorGridEntity.GridPosition;
+        lastKnownPlayerPosition = Vector2Int.zero;
+
+        hasLastKnownPlayerPosition = false;
+        isAware = false;
+        turnsSincePlayerSeen = 0;
+
         isInitialized = true;
     }
 
@@ -70,104 +111,239 @@ public class SimpleEnemyAI : MonoBehaviour
             return;
         }
 
-        int distanceToPlayer = GetManhattanDistance(actorGridEntity.GridPosition, playerActor.GridPosition);
-
-        if (distanceToPlayer == 1)
+        if (TryAttackAdjacentPlayer())
         {
-            actorCombat.Attack(playerActor);
             return;
         }
+
+        UpdateAwareness();
+
+        if (isAware)
+        {
+            ActWhileAware();
+            return;
+        }
+
+        ActWhileUnaware();
+    }
+
+    private bool TryAttackAdjacentPlayer()
+    {
+        int distanceToPlayer = GetManhattanDistance(actorGridEntity.GridPosition, playerActor.GridPosition);
+
+        if (distanceToPlayer != 1)
+        {
+            return false;
+        }
+
+        actorCombat.Attack(playerActor);
+
+        // If the enemy is close enough to attack, it definitely knows where the player is.
+        RememberPlayerPosition();
+
+        isAware = true;
+        turnsSincePlayerSeen = 0;
+
+        return true;
+    }
+
+    private void UpdateAwareness()
+    {
+        if (CanCurrentlySeePlayer())
+        {
+            if (!isAware && printAwarenessDebug)
+            {
+                Debug.Log(actorGridEntity.DisplayName + " sees the player.");
+            }
+
+            isAware = true;
+            turnsSincePlayerSeen = 0;
+
+            RememberPlayerPosition();
+            return;
+        }
+
+        if (!isAware)
+        {
+            return;
+        }
+
+        turnsSincePlayerSeen++;
+
+        if (turnsSincePlayerSeen > chaseTurnsAfterLosingSight)
+        {
+            if (printAwarenessDebug)
+            {
+                Debug.Log(actorGridEntity.DisplayName + " lost the player.");
+            }
+
+            isAware = false;
+            hasLastKnownPlayerPosition = false;
+        }
+    }
+
+    private bool CanCurrentlySeePlayer()
+    {
+        int distanceToPlayer = GetManhattanDistance(actorGridEntity.GridPosition, playerActor.GridPosition);
 
         if (distanceToPlayer > detectionRange)
         {
+            return false;
+        }
+
+        return GridLineOfSight.HasLineOfSight(
+            mapData,
+            actorGridEntity.GridPosition,
+            playerActor.GridPosition
+        );
+    }
+
+    private void RememberPlayerPosition()
+    {
+        lastKnownPlayerPosition = playerActor.GridPosition;
+        hasLastKnownPlayerPosition = true;
+    }
+
+    private void ActWhileAware()
+    {
+        if (CanCurrentlySeePlayer())
+        {
+            TryPathToward(playerActor.GridPosition, true);
             return;
         }
 
-        TryMoveTowardPlayer();
+        if (!hasLastKnownPlayerPosition)
+        {
+            return;
+        }
+
+        if (actorGridEntity.GridPosition == lastKnownPlayerPosition)
+        {
+            isAware = false;
+            hasLastKnownPlayerPosition = false;
+            return;
+        }
+
+        TryPathToward(lastKnownPlayerPosition, false);
     }
 
-    private void TryMoveTowardPlayer()
+    private void ActWhileUnaware()
     {
-        List<Vector2Int> preferredDirections = GetPreferredDirectionsToPlayer();
-
-        for (int i = 0; i < preferredDirections.Count; i++)
+        if (!canWanderWhileUnaware)
         {
-            Vector2Int direction = preferredDirections[i];
+            return;
+        }
+
+        int safeWanderChance = Mathf.Clamp(wanderChancePercent, 0, 100);
+        int roll = Random.Range(0, 100);
+
+        if (roll >= safeWanderChance)
+        {
+            return;
+        }
+
+        TryWander();
+    }
+
+    private void TryWander()
+    {
+        int safeAttempts = Mathf.Max(1, wanderDirectionAttempts);
+
+        for (int i = 0; i < safeAttempts; i++)
+        {
+            Vector2Int direction = GetRandomCardinalDirection();
             Vector2Int targetPosition = actorGridEntity.GridPosition + direction;
 
-            ActorGridEntity blockingActor = mapData.GetActorAt(targetPosition);
-
-            // If the target tile is the player, attack instead of moving.
-            if (blockingActor == playerActor)
-            {
-                actorCombat.Attack(playerActor);
-                return;
-            }
-
-            // Do not move into other enemies or blocked actor cells.
-            if (blockingActor != null)
+            if (!CanWanderTo(targetPosition))
             {
                 continue;
             }
 
-            if (actorGridEntity.TryMove(direction))
-            {
-                return;
-            }
+            actorGridEntity.TryMove(direction);
+            return;
         }
     }
 
-    private List<Vector2Int> GetPreferredDirectionsToPlayer()
+    private bool CanWanderTo(Vector2Int targetPosition)
     {
-        List<Vector2Int> directions = new List<Vector2Int>();
-
-        Vector2Int offset = playerActor.GridPosition - actorGridEntity.GridPosition;
-
-        Vector2Int horizontalDirection = Vector2Int.zero;
-        Vector2Int verticalDirection = Vector2Int.zero;
-
-        if (offset.x > 0)
+        if (mapData == null)
         {
-            horizontalDirection = Vector2Int.right;
-        }
-        else if (offset.x < 0)
-        {
-            horizontalDirection = Vector2Int.left;
+            return false;
         }
 
-        if (offset.y > 0)
+        if (!mapData.IsWalkable(targetPosition))
         {
-            verticalDirection = Vector2Int.up;
-        }
-        else if (offset.y < 0)
-        {
-            verticalDirection = Vector2Int.down;
+            return false;
         }
 
-        // Try the strongest axis first.
-        // Example: if the player is much farther horizontally, move horizontally first.
-        if (Mathf.Abs(offset.x) >= Mathf.Abs(offset.y))
+        // Keep idle wandering near the enemy's spawn point.
+        // This prevents enemies from randomly drifting across the whole dungeon.
+        int distanceFromHome = GetManhattanDistance(homePosition, targetPosition);
+
+        if (distanceFromHome > maxWanderDistanceFromHome)
         {
-            AddDirectionIfValid(directions, horizontalDirection);
-            AddDirectionIfValid(directions, verticalDirection);
-        }
-        else
-        {
-            AddDirectionIfValid(directions, verticalDirection);
-            AddDirectionIfValid(directions, horizontalDirection);
+            return false;
         }
 
-        return directions;
+        return true;
     }
 
-    private void AddDirectionIfValid(List<Vector2Int> directions, Vector2Int direction)
+    private void TryPathToward(Vector2Int targetPosition, bool targetIsPlayer)
     {
-        if (direction == Vector2Int.zero)
+        List<Vector2Int> path;
+
+        bool foundPath = GridPathfinder.TryFindPath(
+            mapData,
+            actorGridEntity.GridPosition,
+            targetPosition,
+            detectionRange + chaseTurnsAfterLosingSight,
+            out path
+        );
+
+        if (!foundPath)
         {
             return;
         }
 
-        directions.Add(direction);
+        if (path.Count < 2)
+        {
+            return;
+        }
+
+        Vector2Int nextStep = path[1];
+
+        if (targetIsPlayer)
+        {
+            ActorGridEntity actorAtNextStep = mapData.GetActorAt(nextStep);
+
+            if (actorAtNextStep == playerActor)
+            {
+                actorCombat.Attack(playerActor);
+                return;
+            }
+        }
+
+        TryMoveToNextStep(nextStep);
+    }
+
+    private void TryMoveToNextStep(Vector2Int nextStep)
+    {
+        ActorGridEntity actorAtNextStep = mapData.GetActorAt(nextStep);
+
+        if (actorAtNextStep != null)
+        {
+            return;
+        }
+
+        Vector2Int direction = nextStep - actorGridEntity.GridPosition;
+
+        actorGridEntity.TryMove(direction);
+    }
+
+    private Vector2Int GetRandomCardinalDirection()
+    {
+        int index = Random.Range(0, cardinalDirections.Length);
+        return cardinalDirections[index];
     }
 
     private int GetManhattanDistance(Vector2Int a, Vector2Int b)

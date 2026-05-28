@@ -68,6 +68,14 @@ public class MapCell
         }
     }
 
+    public bool HasBlockingSightFeature
+    {
+        get
+        {
+            return OccupyingFeature != null && OccupyingFeature.BlocksSight;
+        }
+    }
+
     public bool BlocksMovement
     {
         get

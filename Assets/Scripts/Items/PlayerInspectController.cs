@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -9,19 +11,19 @@ using UnityEngine.InputSystem;
  * Current behavior:
  * - listens for an inspect input action
  * - checks the player's current grid cell
- * - if an item is on the tile, prints item details to the message log
- * - if a feature is on the tile, prints feature details
+ * - if items are on the tile, lists the entire item pile
+ * - if no item exists but a feature exists, describes the feature
  * - if nothing is there, prints a simple empty message
  *
  * Main responsibilities:
  * - receive inspect input
  * - avoid input while enemy turns are processing
- * - inspect the top item on the player's current tile
+ * - avoid ground inspection while inventory UI is open
+ * - inspect all items on the player's current tile
  * - inspect the feature on the player's current tile
  *
  * Important:
  * Inspecting does not consume a turn.
- * Looking at an item should be free because it is an information action.
  *
  * Later this can expand into:
  * - inspecting adjacent tiles
@@ -80,6 +82,11 @@ public class PlayerInspectController : MonoBehaviour
             return;
         }
 
+        if (GameUIState.IsInventoryOpen)
+        {
+            return;
+        }
+
         if (turnManager != null && !turnManager.CanPlayerAct)
         {
             return;
@@ -90,11 +97,11 @@ public class PlayerInspectController : MonoBehaviour
 
     private void InspectCurrentTile()
     {
-        ItemGridEntity itemOnGround = mapData.GetTopItemAt(actorGridEntity.GridPosition);
+        List<ItemGridEntity> itemsOnGround = mapData.GetItemsAt(actorGridEntity.GridPosition);
 
-        if (itemOnGround != null)
+        if (itemsOnGround.Count > 0)
         {
-            GameMessageLog.Write(itemOnGround.GetInspectText());
+            GameMessageLog.Write(BuildItemPileInspectText(itemsOnGround));
             return;
         }
 
@@ -102,10 +109,62 @@ public class PlayerInspectController : MonoBehaviour
 
         if (feature != null)
         {
-            GameMessageLog.Write("You see " + feature.DisplayName + ".");
+            GameMessageLog.Write(BuildFeatureInspectText(feature));
             return;
         }
 
         GameMessageLog.Write("There is nothing notable here.");
+    }
+
+    private string BuildItemPileInspectText(List<ItemGridEntity> itemsOnGround)
+    {
+        if (itemsOnGround.Count == 1)
+        {
+            return itemsOnGround[0].GetInspectText();
+        }
+
+        StringBuilder builder = new StringBuilder();
+
+        builder.AppendLine("You see several items here:");
+
+        for (int i = 0; i < itemsOnGround.Count; i++)
+        {
+            if (itemsOnGround[i] == null)
+            {
+                continue;
+            }
+
+            builder.Append("- ");
+            builder.AppendLine(GetItemDisplayName(itemsOnGround[i]));
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private string BuildFeatureInspectText(MapFeatureEntity feature)
+    {
+        StairsDownFeature stairsDownFeature = feature.GetComponent<StairsDownFeature>();
+
+        if (stairsDownFeature != null)
+        {
+            return "You see " + feature.DisplayName + ". Press E to descend.";
+        }
+
+        return "You see " + feature.DisplayName + ".";
+    }
+
+    private string GetItemDisplayName(ItemGridEntity item)
+    {
+        if (item == null || item.ItemDefinition == null)
+        {
+            return "Unknown Item";
+        }
+
+        if (item.Quantity > 1)
+        {
+            return item.ItemDefinition.DisplayName + " x" + item.Quantity;
+        }
+
+        return item.ItemDefinition.DisplayName;
     }
 }

@@ -9,30 +9,26 @@ using UnityEngine;
  * Current turn order:
  * 1. Player performs one valid action.
  * 2. Player survival updates.
- * 3. TurnManager processes all enemy turns.
- * 4. Control returns to the player.
+ * 3. Field of view refreshes.
+ * 4. Enemies take turns.
+ * 5. Field of view refreshes again so enemy visibility updates.
+ * 6. Control returns to the player.
  *
  * A valid player action is currently:
  * - moving one tile
  * - attacking an enemy by bumping into it
- * - picking up an item
+ * - picking up items
  * - equipping an item
  * - using an item
+ * - dropping an item
+ * - opening/closing a door
  *
  * Invalid actions, such as walking into a wall, do not consume a turn.
  *
- * Main responsibilities:
- * - know when the player is allowed to act
- * - receive a signal after the player performs a valid action
- * - update player survival after valid actions
- * - tell each enemy AI to take one turn
- * - skip dead, destroyed, or disabled enemies
- *
  * Important:
  * This is not a speed/energy scheduler yet.
- * Later, this can evolve into a proper roguelike time system where actions
- * have different costs, fast enemies act more often, and slow actions delay
- * the actor's next turn.
+ * Later, this can evolve into a proper roguelike time system where actions have
+ * different costs and actors act according to speed.
  */
 
 public class TurnManager : MonoBehaviour
@@ -42,13 +38,16 @@ public class TurnManager : MonoBehaviour
     private MapData mapData;
     private ActorGridEntity playerActor;
     private ActorSurvival playerSurvival;
+    private PlayerFieldOfView playerFieldOfView;
     private bool isProcessingEnemyTurns;
 
     public bool CanPlayerAct
     {
         get
         {
-            return !isProcessingEnemyTurns && playerActor != null && playerActor.gameObject.activeInHierarchy;
+            return !isProcessingEnemyTurns &&
+                   playerActor != null &&
+                   playerActor.gameObject.activeInHierarchy;
         }
     }
 
@@ -57,10 +56,12 @@ public class TurnManager : MonoBehaviour
         mapData = newMapData;
         playerActor = newPlayerActor;
         playerSurvival = null;
+        playerFieldOfView = null;
 
         if (playerActor != null)
         {
             playerSurvival = playerActor.GetComponent<ActorSurvival>();
+            playerFieldOfView = playerActor.GetComponent<PlayerFieldOfView>();
         }
 
         enemies.Clear();
@@ -72,6 +73,8 @@ public class TurnManager : MonoBehaviour
                 enemies.Add(newEnemies[i]);
             }
         }
+
+        RefreshPlayerFieldOfView();
     }
 
     public void PlayerTookAction()
@@ -82,6 +85,7 @@ public class TurnManager : MonoBehaviour
         }
 
         ProcessPlayerActionEffects();
+        RefreshPlayerFieldOfView();
 
         if (!CanPlayerAct)
         {
@@ -89,6 +93,7 @@ public class TurnManager : MonoBehaviour
         }
 
         ProcessEnemyTurns();
+        RefreshPlayerFieldOfView();
     }
 
     private void ProcessPlayerActionEffects()
@@ -109,7 +114,6 @@ public class TurnManager : MonoBehaviour
         {
             SimpleEnemyAI enemy = enemies[i];
 
-            // Destroyed Unity objects compare as null.
             if (enemy == null)
             {
                 continue;
@@ -129,5 +133,15 @@ public class TurnManager : MonoBehaviour
         }
 
         isProcessingEnemyTurns = false;
+    }
+
+    private void RefreshPlayerFieldOfView()
+    {
+        if (playerFieldOfView == null)
+        {
+            return;
+        }
+
+        playerFieldOfView.RefreshVisibility();
     }
 }

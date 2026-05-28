@@ -6,43 +6,53 @@ using UnityEngine.InputSystem;
 /*
  * PlayerInventoryUI
  * -----------------
- * Displays the player's current inventory in a simple text-based UI panel.
+ * Displays the player's inventory and allows simple selected item actions.
  *
- * This is not the final inventory system. It is a temporary but useful UI so you
- * can see what the player is carrying without relying on Console debug output.
+ * This script should be placed on an always-active object, such as:
+ *
+ * InventoryCanvas
+ * ├── InventoryUIController   <- this script
+ * └── InventoryPanel          <- enabled/disabled by this script
+ *     └── InventoryText
  *
  * Current behavior:
- * - listens for an inventory toggle input action
- * - opens/closes the inventory panel
- * - lists all carried items
- * - shows item quantities
- * - shows item categories
- * - refreshes automatically when the inventory changes
+ * - I toggles inventory
+ * - Tab selects the next item
+ * - T inspects the selected item
+ * - F equips the selected item if it is equipment
+ * - R uses the selected item if it is consumable
+ * - D drops the selected item onto the ground
  *
- * Current display example:
- * Inventory
- * 1. Bread x3 [Food]
- * 2. Rusty Sword [Weapon]
- * 3. Copper Coin x12 [Currency]
+ * Main responsibilities:
+ * - display inventory items
+ * - track selected item index
+ * - prevent gameplay input while inventory is open
+ * - inspect/equip/use/drop the selected item
+ * - consume a turn only when equip/use/drop succeeds
  *
  * Important:
- * This script only displays inventory data.
- * It does not equip, use, drop, sort, or select items yet.
+ * This is still not the final inventory UI.
+ * It is a temporary text-based control layer so item interaction is selected
+ * instead of always using the first valid item.
  *
  * Later this can expand into:
- * - selectable inventory rows
+ * - previous item selection
+ * - mouse selection
  * - item details panel
- * - use/equip/drop buttons
+ * - split stack dropping
  * - equipment comparison
- * - inventory grid
- * - drag-and-drop
- * - item filtering by category
+ * - drag-and-drop inventory
  */
 
 public class PlayerInventoryUI : MonoBehaviour
 {
     [Header("Input")]
     [SerializeField] private InputActionReference toggleInventoryAction;
+    [SerializeField] private InputActionReference selectNextItemAction;
+    [SerializeField] private InputActionReference inspectSelectedItemAction;
+    [SerializeField] private InputActionReference equipSelectedItemAction;
+    [SerializeField] private InputActionReference useSelectedItemAction;
+    [SerializeField] private InputActionReference dropSelectedItemAction;
 
     [Header("UI")]
     [SerializeField] private GameObject inventoryPanel;
@@ -53,52 +63,100 @@ public class PlayerInventoryUI : MonoBehaviour
     [SerializeField] private bool startHidden = true;
 
     private ActorInventory targetInventory;
+    private ActorEquipment targetEquipment;
+    private ActorItemUser targetItemUser;
+    private ActorItemDropper targetItemDropper;
+    private TurnManager turnManager;
+
+    private int selectedIndex;
     private bool isOpen;
 
     private void Awake()
     {
-        if (startHidden)
-        {
-            SetOpen(false);
-        }
-        else
-        {
-            SetOpen(true);
-        }
+        SetOpen(!startHidden);
     }
 
     private void OnEnable()
     {
-        if (toggleInventoryAction != null)
-        {
-            toggleInventoryAction.action.performed += OnToggleInventoryPerformed;
-            toggleInventoryAction.action.Enable();
-        }
+        EnableInput();
     }
 
     private void OnDisable()
     {
-        if (toggleInventoryAction != null)
-        {
-            toggleInventoryAction.action.performed -= OnToggleInventoryPerformed;
-            toggleInventoryAction.action.Disable();
-        }
-
+        DisableInput();
         UnsubscribeFromInventory();
+
+        // Safety reset so gameplay input does not stay blocked if this object is disabled.
+        if (GameUIState.IsInventoryOpen)
+        {
+            GameUIState.IsInventoryOpen = false;
+        }
     }
 
-    public void SetTarget(ActorInventory newInventory)
+    public void SetTarget(
+        ActorInventory newInventory,
+        ActorEquipment newEquipment,
+        ActorItemUser newItemUser,
+        ActorItemDropper newItemDropper,
+        TurnManager newTurnManager)
     {
         UnsubscribeFromInventory();
 
         targetInventory = newInventory;
+        targetEquipment = newEquipment;
+        targetItemUser = newItemUser;
+        targetItemDropper = newItemDropper;
+        turnManager = newTurnManager;
+        selectedIndex = 0;
 
         if (targetInventory != null)
         {
-            targetInventory.InventoryChanged += Refresh;
+            targetInventory.InventoryChanged += OnInventoryChanged;
         }
 
         Refresh();
+    }
+
+    private void EnableInput()
+    {
+        SubscribeAction(toggleInventoryAction, OnToggleInventoryPerformed);
+        SubscribeAction(selectNextItemAction, OnSelectNextItemPerformed);
+        SubscribeAction(inspectSelectedItemAction, OnInspectSelectedItemPerformed);
+        SubscribeAction(equipSelectedItemAction, OnEquipSelectedItemPerformed);
+        SubscribeAction(useSelectedItemAction, OnUseSelectedItemPerformed);
+        SubscribeAction(dropSelectedItemAction, OnDropSelectedItemPerformed);
+    }
+
+    private void DisableInput()
+    {
+        UnsubscribeAction(toggleInventoryAction, OnToggleInventoryPerformed);
+        UnsubscribeAction(selectNextItemAction, OnSelectNextItemPerformed);
+        UnsubscribeAction(inspectSelectedItemAction, OnInspectSelectedItemPerformed);
+        UnsubscribeAction(equipSelectedItemAction, OnEquipSelectedItemPerformed);
+        UnsubscribeAction(useSelectedItemAction, OnUseSelectedItemPerformed);
+        UnsubscribeAction(dropSelectedItemAction, OnDropSelectedItemPerformed);
+    }
+
+    private void SubscribeAction(InputActionReference actionReference, System.Action<InputAction.CallbackContext> callback)
+    {
+        if (actionReference == null)
+        {
+            return;
+        }
+
+        actionReference.action.performed += callback;
+        actionReference.action.Enable();
+    }
+
+    private void UnsubscribeAction(InputActionReference actionReference, System.Action<InputAction.CallbackContext> callback)
+    {
+        if (actionReference == null)
+        {
+            return;
+        }
+
+        actionReference.action.performed -= callback;
+        actionReference.action.Disable();
     }
 
     private void OnToggleInventoryPerformed(InputAction.CallbackContext context)
@@ -106,9 +164,60 @@ public class PlayerInventoryUI : MonoBehaviour
         SetOpen(!isOpen);
     }
 
+    private void OnSelectNextItemPerformed(InputAction.CallbackContext context)
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        SelectNextItem();
+    }
+
+    private void OnInspectSelectedItemPerformed(InputAction.CallbackContext context)
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        InspectSelectedItem();
+    }
+
+    private void OnEquipSelectedItemPerformed(InputAction.CallbackContext context)
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        TryEquipSelectedItem();
+    }
+
+    private void OnUseSelectedItemPerformed(InputAction.CallbackContext context)
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        TryUseSelectedItem();
+    }
+
+    private void OnDropSelectedItemPerformed(InputAction.CallbackContext context)
+    {
+        if (!isOpen)
+        {
+            return;
+        }
+
+        TryDropSelectedItem();
+    }
+
     private void SetOpen(bool open)
     {
         isOpen = open;
+        GameUIState.IsInventoryOpen = isOpen;
 
         if (inventoryPanel != null)
         {
@@ -121,6 +230,164 @@ public class PlayerInventoryUI : MonoBehaviour
         }
     }
 
+    private void OnInventoryChanged()
+    {
+        ClampSelectedIndex();
+        Refresh();
+    }
+
+    private void SelectNextItem()
+    {
+        if (targetInventory == null || targetInventory.Items.Count == 0)
+        {
+            selectedIndex = 0;
+            Refresh();
+            return;
+        }
+
+        selectedIndex++;
+
+        if (selectedIndex >= targetInventory.Items.Count)
+        {
+            selectedIndex = 0;
+        }
+
+        Refresh();
+    }
+
+    private void InspectSelectedItem()
+    {
+        ItemInstance selectedItem = GetSelectedItem();
+
+        if (selectedItem == null)
+        {
+            GameMessageLog.Write("There is no item selected.");
+            return;
+        }
+
+        GameMessageLog.Write(ItemDescriptionBuilder.Build(selectedItem));
+    }
+
+    private void TryEquipSelectedItem()
+    {
+        ItemInstance selectedItem = GetSelectedItem();
+
+        if (selectedItem == null)
+        {
+            GameMessageLog.Write("There is no item selected.");
+            return;
+        }
+
+        if (!selectedItem.IsEquipment)
+        {
+            GameMessageLog.Write(selectedItem.GetDisplayName() + " cannot be equipped.");
+            return;
+        }
+
+        if (targetEquipment == null)
+        {
+            GameMessageLog.Write("There is no equipment system available.");
+            return;
+        }
+
+        bool equipped = targetEquipment.TryEquip(selectedItem, targetInventory);
+
+        if (equipped && turnManager != null)
+        {
+            turnManager.PlayerTookAction();
+        }
+    }
+
+    private void TryUseSelectedItem()
+    {
+        ItemInstance selectedItem = GetSelectedItem();
+
+        if (selectedItem == null)
+        {
+            GameMessageLog.Write("There is no item selected.");
+            return;
+        }
+
+        if (selectedItem.Definition == null || !selectedItem.Definition.IsConsumable)
+        {
+            GameMessageLog.Write(selectedItem.GetDisplayName() + " cannot be used.");
+            return;
+        }
+
+        if (targetItemUser == null)
+        {
+            GameMessageLog.Write("There is no item use system available.");
+            return;
+        }
+
+        bool used = targetItemUser.TryUseItem(selectedItem);
+
+        if (used && turnManager != null)
+        {
+            turnManager.PlayerTookAction();
+        }
+    }
+
+    private void TryDropSelectedItem()
+    {
+        ItemInstance selectedItem = GetSelectedItem();
+
+        if (selectedItem == null)
+        {
+            GameMessageLog.Write("There is no item selected.");
+            return;
+        }
+
+        if (targetItemDropper == null)
+        {
+            GameMessageLog.Write("There is no item drop system available.");
+            return;
+        }
+
+        bool dropped = targetItemDropper.TryDropItem(selectedItem);
+
+        if (dropped && turnManager != null)
+        {
+            turnManager.PlayerTookAction();
+        }
+    }
+
+    private ItemInstance GetSelectedItem()
+    {
+        if (targetInventory == null)
+        {
+            return null;
+        }
+
+        if (targetInventory.Items.Count == 0)
+        {
+            return null;
+        }
+
+        ClampSelectedIndex();
+
+        return targetInventory.Items[selectedIndex];
+    }
+
+    private void ClampSelectedIndex()
+    {
+        if (targetInventory == null || targetInventory.Items.Count == 0)
+        {
+            selectedIndex = 0;
+            return;
+        }
+
+        if (selectedIndex < 0)
+        {
+            selectedIndex = 0;
+        }
+
+        if (selectedIndex >= targetInventory.Items.Count)
+        {
+            selectedIndex = targetInventory.Items.Count - 1;
+        }
+    }
+
     private void Refresh()
     {
         if (inventoryText == null)
@@ -128,18 +395,13 @@ public class PlayerInventoryUI : MonoBehaviour
             return;
         }
 
-        if (targetInventory == null)
+        if (targetInventory == null || targetInventory.Items.Count == 0)
         {
             inventoryText.text = emptyInventoryText;
             return;
         }
 
-        if (targetInventory.Items.Count == 0)
-        {
-            inventoryText.text = emptyInventoryText;
-            return;
-        }
-
+        ClampSelectedIndex();
         inventoryText.text = BuildInventoryText();
     }
 
@@ -148,6 +410,7 @@ public class PlayerInventoryUI : MonoBehaviour
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine("Inventory");
+        builder.AppendLine("Tab: Select | T: Inspect | F: Equip | R: Use | D: Drop");
         builder.AppendLine();
 
         for (int i = 0; i < targetInventory.Items.Count; i++)
@@ -157,6 +420,15 @@ public class PlayerInventoryUI : MonoBehaviour
             if (item == null)
             {
                 continue;
+            }
+
+            if (i == selectedIndex)
+            {
+                builder.Append("> ");
+            }
+            else
+            {
+                builder.Append("  ");
             }
 
             builder.Append(i + 1);
@@ -177,7 +449,7 @@ public class PlayerInventoryUI : MonoBehaviour
             return;
         }
 
-        targetInventory.InventoryChanged -= Refresh;
+        targetInventory.InventoryChanged -= OnInventoryChanged;
         targetInventory = null;
     }
 }

@@ -653,13 +653,15 @@ GameObject:
   - component: {fileID: 271554127945689857}
   - component: {fileID: 5916217260257572408}
   - component: {fileID: 7263137195248844674}
-  - component: {fileID: 9077675890658619292}
   - component: {fileID: 682258576956301037}
   - component: {fileID: 579536736124191511}
   - component: {fileID: 7195687080734652211}
-  - component: {fileID: 2469770168103151276}
   - component: {fileID: 8974669970250680499}
   - component: {fileID: 858098536023112584}
+  - component: {fileID: 3482409187901286557}
+  - component: {fileID: 1041037195802966545}
+  - component: {fileID: 1966120068907175556}
+  - component: {fileID: 6733018073370823324}
   m_Layer: 3
   m_Name: Player Prefab
   m_TagString: Untagged
@@ -783,19 +785,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ced30b7d57d812e4eb1ad059a45b11cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorEquipment
---- !u!114 &9077675890658619292
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6014314104148356597}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e67a93c637bf9204dabcd018e1fe134a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerEquipmentController
-  equipFirstEquipmentAction: {fileID: 7833146247417988857, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
 --- !u!114 &682258576956301037
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -835,19 +824,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 644ec27fbf4ae204bbdafa6eabc092c9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorItemUser
---- !u!114 &2469770168103151276
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6014314104148356597}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7f68ba62fa2dab546930eccedfec0185, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerItemUseController
-  useFirstConsumableAction: {fileID: -8925497346918645447, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
 --- !u!114 &8974669970250680499
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -885,6 +861,57 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInspectController
   inspectAction: {fileID: 5454077686322762592, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
+--- !u!114 &3482409187901286557
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3bba1fbeec45055409ca7bdaa80c11cd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActorItemDropper
+--- !u!114 &1041037195802966545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0a9b39e5a1c01154eb20cfc60ebc1a1b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInteractionController
+  interactAction: {fileID: 7822021486433043877, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
+--- !u!114 &1966120068907175556
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 208d56e325194a94ab44f561c6488c98, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerFieldOfView
+  visionRadius: 8
+--- !u!114 &6733018073370823324
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53c777bdc38fd634fa5641196d04b451, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerWaitController
+  waitAction: {fileID: 9066661805746802309, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
 --- !u!1 &6419676151027369568
 GameObject:
   m_ObjectHideFlags: 0

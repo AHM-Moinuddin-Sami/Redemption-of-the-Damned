@@ -8,19 +8,24 @@ using UnityEngine;
  *
  * Current startup process:
  * 1. Generate a dungeon.
- * 2. Store the generated MapData.
- * 3. Render the map to Unity Tilemaps.
+ * 2. Store generated MapData.
+ * 3. Render the map to Tilemaps.
  * 4. Spawn the player.
- * 5. Initialize player controllers.
- * 6. Spawn stairs.
- * 7. Spawn enemies.
- * 8. Spawn random item drops.
- * 9. Initialize enemy AI.
- * 10. Initialize the TurnManager.
- * 11. Assign the camera follow target.
+ * 5. Initialize FOV and world object visibility.
+ * 6. Spawn stairs, doors, enemies, and items.
+ * 7. Initialize enemy AI.
+ * 8. Initialize TurnManager.
+ * 9. Refresh FOV once all runtime objects exist.
+ * 10. Assign camera/UI targets.
  *
- * This script still wires many prototype systems together directly.
- * Later, this should be split into cleaner systems.
+ * This script is still a prototype bootstrapper.
+ * Later, it should be split into:
+ * - RunManager
+ * - ZoneManager
+ * - ActorSpawner
+ * - FeatureSpawner
+ * - ItemSpawner
+ * - SaveManager
  */
 
 public class GameBootstrap : MonoBehaviour
@@ -28,6 +33,10 @@ public class GameBootstrap : MonoBehaviour
     [Header("Generation")]
     [SerializeField] private DungeonGenerator dungeonGenerator;
     [SerializeField] private MapRenderer mapRenderer;
+
+    [Header("Vision")]
+    [SerializeField] private FieldOfViewRenderer fieldOfViewRenderer;
+    [SerializeField] private WorldObjectVisibilityController worldObjectVisibilityController;
 
     [Header("Turns")]
     [SerializeField] private TurnManager turnManager;
@@ -40,14 +49,11 @@ public class GameBootstrap : MonoBehaviour
 
     [Header("Features")]
     [SerializeField] private StairsDownFeature stairsDownPrefab;
+    [SerializeField] private DoorFeature doorPrefab;
 
     [Header("Items")]
     [SerializeField] private ItemGridEntity itemPrefab;
     [SerializeField] private ItemDropTable floorLootTable;
-    [Header("UI")]
-    [SerializeField] private PlayerHUD playerHUD;
-    [SerializeField] private PlayerInventoryUI playerInventoryUI;
-    [SerializeField] private PlayerEquipmentUI playerEquipmentUI;
 
     [Header("Scene References")]
     [SerializeField] private CameraFollowTarget cameraFollowTarget;
@@ -55,12 +61,19 @@ public class GameBootstrap : MonoBehaviour
     [SerializeField] private Transform featureParent;
     [SerializeField] private Transform itemParent;
 
+    [Header("UI")]
+    [SerializeField] private PlayerHUD playerHUD;
+    [SerializeField] private PlayerInventoryUI playerInventoryUI;
+    [SerializeField] private PlayerEquipmentUI playerEquipmentUI;
+
     private readonly List<SimpleEnemyAI> spawnedEnemyAIs = new List<SimpleEnemyAI>();
     private readonly List<ItemGridEntity> spawnedItems = new List<ItemGridEntity>();
+    private readonly List<DoorFeature> spawnedDoors = new List<DoorFeature>();
 
     private MapData currentMapData;
     private PlayerGridMover currentPlayer;
     private ActorGridEntity currentPlayerActor;
+    private PlayerFieldOfView currentPlayerFieldOfView;
     private StairsDownFeature currentStairsDown;
     private int currentFloorNumber = 1;
 
@@ -89,24 +102,45 @@ public class GameBootstrap : MonoBehaviour
 
         SpawnPlayer(generationResult.PlayerSpawnPosition);
         SpawnStairsDown(generationResult.StairsDownPosition);
+        SpawnDoors(generationResult.DoorSpawnPositions);
         SpawnEnemies(generationResult.EnemySpawnPositions);
         SpawnItems(generationResult.ItemSpawnPositions);
         InitializeTurnManager();
+        RefreshCurrentFieldOfView();
     }
 
     private void ClearExistingRuntimeObjects()
     {
+        if (worldObjectVisibilityController != null)
+        {
+            worldObjectVisibilityController.SetTarget(null);
+        }
+
+        if (fieldOfViewRenderer != null)
+        {
+            fieldOfViewRenderer.Clear();
+        }
+
         if (currentPlayer != null)
         {
             Destroy(currentPlayer.gameObject);
             currentPlayer = null;
             currentPlayerActor = null;
+            currentPlayerFieldOfView = null;
         }
 
         if (currentStairsDown != null)
         {
             Destroy(currentStairsDown.gameObject);
             currentStairsDown = null;
+        }
+
+        for (int i = 0; i < spawnedDoors.Count; i++)
+        {
+            if (spawnedDoors[i] != null)
+            {
+                Destroy(spawnedDoors[i].gameObject);
+            }
         }
 
         for (int i = 0; i < spawnedEnemyAIs.Count; i++)
@@ -125,6 +159,7 @@ public class GameBootstrap : MonoBehaviour
             }
         }
 
+        spawnedDoors.Clear();
         spawnedEnemyAIs.Clear();
         spawnedItems.Clear();
     }
@@ -135,6 +170,17 @@ public class GameBootstrap : MonoBehaviour
         currentPlayer.Initialize(currentMapData, mapRenderer, spawnPosition, turnManager);
 
         currentPlayerActor = currentPlayer.GetComponent<ActorGridEntity>();
+        currentPlayerFieldOfView = currentPlayer.GetComponent<PlayerFieldOfView>();
+
+        if (currentPlayerFieldOfView != null)
+        {
+            currentPlayerFieldOfView.Initialize(currentMapData, fieldOfViewRenderer);
+        }
+
+        if (worldObjectVisibilityController != null)
+        {
+            worldObjectVisibilityController.SetTarget(currentPlayerFieldOfView);
+        }
 
         if (playerHUD != null)
         {
@@ -142,13 +188,25 @@ public class GameBootstrap : MonoBehaviour
         }
 
         ActorInventory playerInventory = currentPlayer.GetComponent<ActorInventory>();
+        ActorEquipment playerEquipment = currentPlayer.GetComponent<ActorEquipment>();
+        ActorItemUser playerItemUser = currentPlayer.GetComponent<ActorItemUser>();
+        ActorItemDropper playerItemDropper = currentPlayer.GetComponent<ActorItemDropper>();
+
+        if (playerItemDropper != null)
+        {
+            playerItemDropper.Initialize(currentMapData, mapRenderer, itemPrefab, itemParent);
+        }
 
         if (playerInventoryUI != null)
         {
-            playerInventoryUI.SetTarget(playerInventory);
+            playerInventoryUI.SetTarget(
+                playerInventory,
+                playerEquipment,
+                playerItemUser,
+                playerItemDropper,
+                turnManager
+            );
         }
-
-        ActorEquipment playerEquipment = currentPlayer.GetComponent<ActorEquipment>();
 
         if (playerEquipmentUI != null)
         {
@@ -172,25 +230,25 @@ public class GameBootstrap : MonoBehaviour
             pickupController.Initialize(currentMapData, turnManager);
         }
 
-        PlayerEquipmentController equipmentController = currentPlayer.GetComponent<PlayerEquipmentController>();
-
-        if (equipmentController != null)
-        {
-            equipmentController.Initialize(turnManager);
-        }
-
-        PlayerItemUseController itemUseController = currentPlayer.GetComponent<PlayerItemUseController>();
-
-        if (itemUseController != null)
-        {
-            itemUseController.Initialize(turnManager);
-        }
-
         PlayerInspectController inspectController = currentPlayer.GetComponent<PlayerInspectController>();
 
         if (inspectController != null)
         {
             inspectController.Initialize(currentMapData, turnManager);
+        }
+
+        PlayerInteractionController interactionController = currentPlayer.GetComponent<PlayerInteractionController>();
+
+        if (interactionController != null)
+        {
+            interactionController.Initialize(currentMapData, turnManager);
+        }
+
+        PlayerWaitController waitController = currentPlayer.GetComponent<PlayerWaitController>();
+
+        if (waitController != null)
+        {
+            waitController.Initialize(turnManager);
         }
     }
 
@@ -215,6 +273,33 @@ public class GameBootstrap : MonoBehaviour
         {
             Destroy(currentStairsDown.gameObject);
             currentStairsDown = null;
+        }
+    }
+
+    private void SpawnDoors(IReadOnlyList<Vector2Int> doorPositions)
+    {
+        if (doorPrefab == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < doorPositions.Count; i++)
+        {
+            DoorFeature door = Instantiate(doorPrefab, featureParent);
+
+            bool placed = door.Initialize(
+                currentMapData,
+                mapRenderer,
+                doorPositions[i]
+            );
+
+            if (!placed)
+            {
+                Destroy(door.gameObject);
+                continue;
+            }
+
+            spawnedDoors.Add(door);
         }
     }
 
@@ -308,5 +393,15 @@ public class GameBootstrap : MonoBehaviour
         }
 
         turnManager.Initialize(currentMapData, currentPlayerActor, spawnedEnemyAIs);
+    }
+
+    private void RefreshCurrentFieldOfView()
+    {
+        if (currentPlayerFieldOfView == null)
+        {
+            return;
+        }
+
+        currentPlayerFieldOfView.RefreshVisibility();
     }
 }

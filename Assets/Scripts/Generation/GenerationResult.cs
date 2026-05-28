@@ -12,6 +12,7 @@ using UnityEngine;
  * - store stairs down position
  * - store enemy spawn positions
  * - store item spawn positions
+ * - store door spawn positions
  *
  * Later this can expand to include:
  * - stairs up position
@@ -29,18 +30,21 @@ public class GenerationResult
     public Vector2Int StairsDownPosition { get; private set; }
     public IReadOnlyList<Vector2Int> EnemySpawnPositions { get; private set; }
     public IReadOnlyList<Vector2Int> ItemSpawnPositions { get; private set; }
+    public IReadOnlyList<Vector2Int> DoorSpawnPositions { get; private set; }
 
     public GenerationResult(
         MapData mapData,
         Vector2Int playerSpawnPosition,
         Vector2Int stairsDownPosition,
         List<Vector2Int> enemySpawnPositions,
-        List<Vector2Int> itemSpawnPositions)
+        List<Vector2Int> itemSpawnPositions,
+        List<Vector2Int> doorSpawnPositions)
     {
         MapData = mapData;
         PlayerSpawnPosition = playerSpawnPosition;
         StairsDownPosition = stairsDownPosition;
         EnemySpawnPositions = enemySpawnPositions;
         ItemSpawnPositions = itemSpawnPositions;
+        DoorSpawnPositions = doorSpawnPositions;
     }
 }

@@ -11,28 +11,25 @@ using UnityEngine.InputSystem;
  * - converts input into one cardinal grid direction
  * - if an actor is in the target cell, attacks that actor
  * - if the target cell is empty and walkable, moves there
- * - if the player steps onto stairs, triggers the next floor
- * - otherwise tells TurnManager when a valid action was completed
+ * - tells TurnManager when a valid move or attack was completed
  *
  * Main responsibilities:
- * - process player movement input
+ * - process movement input
+ * - block movement input while inventory UI is open
  * - prevent input while enemy turns are processing
  * - trigger bump combat
- * - trigger player movement
- * - check for features after movement
- * - notify TurnManager after a successful normal move or attack
+ * - trigger grid movement
+ * - notify TurnManager after successful movement or attack
  *
  * Important:
- * Invalid movement into walls or empty space does not consume a turn.
- * Stepping onto stairs changes floor immediately and does not process enemy turns.
+ * This script no longer automatically uses stairs.
+ * Stairs and other map features are now handled by PlayerInteractionController.
  *
  * Later this can expand into:
- * - requiring an interact key for stairs
- * - interacting with doors
- * - picking up items
- * - waiting/skipping a turn
  * - diagonal movement
- * - ability targeting
+ * - bumping doors open
+ * - bump interaction options
+ * - action energy costs
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
@@ -47,11 +44,13 @@ public class PlayerGridMover : MonoBehaviour
     private ActorGridEntity actorGridEntity;
     private ActorCombat actorCombat;
     private bool isInitialized;
+    private PlayerFieldOfView playerFieldOfView;
 
     private void Awake()
     {
         actorGridEntity = GetComponent<ActorGridEntity>();
         actorCombat = GetComponent<ActorCombat>();
+        playerFieldOfView = GetComponent<PlayerFieldOfView>();
     }
 
     private void OnEnable()
@@ -84,6 +83,11 @@ public class PlayerGridMover : MonoBehaviour
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
         if (!isInitialized)
+        {
+            return;
+        }
+
+        if (GameUIState.IsInventoryOpen)
         {
             return;
         }
@@ -148,39 +152,11 @@ public class PlayerGridMover : MonoBehaviour
 
         bool moved = actorGridEntity.TryMove(direction);
 
-        if (!moved)
+        if (moved)
         {
-            return;
+            RefreshFieldOfView();
+            NotifyTurnManager();
         }
-
-        // After a successful move, check whether the player stepped onto a feature.
-        // Stairs currently trigger immediately.
-        if (TryUseFeatureAtCurrentPosition())
-        {
-            return;
-        }
-
-        NotifyTurnManager();
-    }
-
-    private bool TryUseFeatureAtCurrentPosition()
-    {
-        MapFeatureEntity feature = mapData.GetFeatureAt(actorGridEntity.GridPosition);
-
-        if (feature == null)
-        {
-            return false;
-        }
-
-        StairsDownFeature stairsDownFeature = feature.GetComponent<StairsDownFeature>();
-
-        if (stairsDownFeature == null)
-        {
-            return false;
-        }
-
-        stairsDownFeature.Use();
-        return true;
     }
 
     private void NotifyTurnManager()
@@ -191,5 +167,15 @@ public class PlayerGridMover : MonoBehaviour
         }
 
         turnManager.PlayerTookAction();
+    }
+
+    private void RefreshFieldOfView()
+    {
+        if (playerFieldOfView == null)
+        {
+            return;
+        }
+
+        playerFieldOfView.RefreshVisibility();
     }
 }
