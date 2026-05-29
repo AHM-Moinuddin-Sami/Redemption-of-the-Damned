@@ -6,30 +6,23 @@ using System.Text;
  * ----------------------
  * Builds readable text descriptions for items.
  *
- * This class is used when the player inspects an item on the ground or later
- * when the inventory/equipment UI needs item tooltip text.
+ * This version supports:
+ * - colored item names
+ * - colored rarity text
+ * - colored affix names
+ * - colored positive/negative stat modifiers
+ * - unique item flavour text
  *
  * Current responsibilities:
  * - show item name
+ * - show rarity
  * - show description text
  * - show category
- * - show quantity
  * - show equipment slot
- * - show stat modifiers
+ * - show base stat modifiers
+ * - show generated affixes and their modifiers
+ * - show unique flavour text
  * - show consumable effects
- *
- * Important:
- * This does not create UI by itself.
- * It only builds text that other systems can display.
- *
- * Later this can expand into:
- * - rarity coloring
- * - affix text
- * - comparison against equipped item
- * - damage ranges
- * - item level
- * - flavor text
- * - value/weight
  */
 
 public static class ItemDescriptionBuilder
@@ -41,19 +34,12 @@ public static class ItemDescriptionBuilder
             return "Unknown Item";
         }
 
-        return Build(itemInstance.Definition, itemInstance.Quantity);
-    }
-
-    public static string Build(ItemDefinition itemDefinition, int quantity)
-    {
-        if (itemDefinition == null)
-        {
-            return "Unknown Item";
-        }
-
         StringBuilder builder = new StringBuilder();
 
-        builder.AppendLine(GetNameLine(itemDefinition, quantity));
+        builder.AppendLine(ItemTextFormatter.FormatItemName(itemInstance));
+        builder.AppendLine("Rarity: " + ItemTextFormatter.FormatRarity(itemInstance.Rarity));
+
+        ItemDefinition itemDefinition = itemInstance.Definition;
 
         if (!string.IsNullOrWhiteSpace(itemDefinition.Description))
         {
@@ -72,30 +58,72 @@ public static class ItemDescriptionBuilder
             }
         }
 
-        AppendStatModifiers(builder, itemDefinition.StatModifiers);
+        AppendStatModifiers(builder, "Base Modifiers:", itemDefinition.StatModifiers);
+        AppendAffixes(builder, itemInstance.RolledAffixes);
+        AppendUniqueFlavorText(builder, itemDefinition);
         AppendConsumableEffects(builder, itemDefinition.ConsumableEffects);
 
         return builder.ToString().TrimEnd();
     }
 
-    private static string GetNameLine(ItemDefinition itemDefinition, int quantity)
+    public static string Build(ItemDefinition itemDefinition, int quantity)
     {
-        if (quantity > 1)
-        {
-            return itemDefinition.DisplayName + " x" + quantity;
-        }
-
-        return itemDefinition.DisplayName;
+        ItemInstance temporaryInstance = new ItemInstance(itemDefinition, quantity);
+        return Build(temporaryInstance);
     }
 
-    private static void AppendStatModifiers(StringBuilder builder, IReadOnlyList<StatModifier> modifiers)
+    private static void AppendAffixes(StringBuilder builder, IReadOnlyList<ItemAffixDefinition> affixes)
+    {
+        if (affixes == null || affixes.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("Rolled Affixes:");
+
+        for (int i = 0; i < affixes.Count; i++)
+        {
+            if (affixes[i] == null)
+            {
+                continue;
+            }
+
+            builder.AppendLine("- " + ItemTextFormatter.FormatAffixName(affixes[i]));
+            AppendStatModifiers(builder, "  Modifiers:", affixes[i].StatModifiers);
+        }
+    }
+
+    private static void AppendUniqueFlavorText(StringBuilder builder, ItemDefinition itemDefinition)
+    {
+        if (itemDefinition == null)
+        {
+            return;
+        }
+
+        if (!itemDefinition.IsUnique)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(itemDefinition.UniqueFlavorText))
+        {
+            return;
+        }
+
+        builder.AppendLine(ItemTextFormatter.FormatUniqueFlavorText(itemDefinition.UniqueFlavorText));
+    }
+
+    private static void AppendStatModifiers(
+        StringBuilder builder,
+        string header,
+        IReadOnlyList<StatModifier> modifiers)
     {
         if (modifiers == null || modifiers.Count == 0)
         {
             return;
         }
 
-        builder.AppendLine("Modifiers:");
+        builder.AppendLine(header);
 
         for (int i = 0; i < modifiers.Count; i++)
         {
@@ -104,8 +132,7 @@ public static class ItemDescriptionBuilder
                 continue;
             }
 
-            string sign = modifiers[i].Value >= 0 ? "+" : "";
-            builder.AppendLine("- " + modifiers[i].StatType + " " + sign + modifiers[i].Value);
+            builder.AppendLine("- " + ItemTextFormatter.FormatStatModifier(modifiers[i]));
         }
     }
 

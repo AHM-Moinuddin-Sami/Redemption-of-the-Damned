@@ -6,37 +6,22 @@ using UnityEngine;
  * --------------
  * Finds simple 4-directional paths through the gameplay grid.
  *
- * This is a lightweight Breadth-First Search pathfinder for the current
- * roguelike prototype.
+ * This is a Breadth-First Search pathfinder for the roguelike prototype.
  *
  * Current responsibilities:
  * - search from a start cell to a goal cell
- * - avoid walls, empty space, closed doors, and occupied actor cells
+ * - avoid walls, empty space, blocking features, and occupied actors
+ * - optionally treat closed doors as pathable so AI can path toward them
  * - allow the goal cell to be occupied by the target actor
- * - return a list of grid positions from start to goal
+ * - return a path from start to goal
  *
  * Path result format:
  * - path[0] is the start position
  * - path[path.Count - 1] is the goal position
  *
- * Example:
- * Enemy at (2, 2)
- * Player at (5, 2)
- * Path:
- * (2,2), (3,2), (4,2), (5,2)
- *
  * Important:
- * This is not A* yet.
- * BFS is easier to understand and reliable for small maps. Later, if map sizes
- * become much larger, this can be replaced with A* using the same public method.
- *
- * Later this can expand into:
- * - diagonal movement
- * - movement costs
- * - dangerous tile avoidance
- * - door-opening path logic
- * - faction blocking rules
- * - cached paths
+ * When allowClosedDoors is true, a closed door can appear as the next path step.
+ * The enemy should then open the door instead of walking into it.
  */
 
 public static class GridPathfinder
@@ -54,6 +39,24 @@ public static class GridPathfinder
         Vector2Int startPosition,
         Vector2Int goalPosition,
         int maxSearchDistance,
+        out List<Vector2Int> path)
+    {
+        return TryFindPath(
+            mapData,
+            startPosition,
+            goalPosition,
+            maxSearchDistance,
+            false,
+            out path
+        );
+    }
+
+    public static bool TryFindPath(
+        MapData mapData,
+        Vector2Int startPosition,
+        Vector2Int goalPosition,
+        int maxSearchDistance,
+        bool allowClosedDoors,
         out List<Vector2Int> path)
     {
         path = new List<Vector2Int>();
@@ -108,7 +111,7 @@ public static class GridPathfinder
                     continue;
                 }
 
-                if (!mapData.IsPathableForActor(nextPosition, goalPosition))
+                if (!mapData.IsPathableForActor(nextPosition, goalPosition, allowClosedDoors))
                 {
                     continue;
                 }

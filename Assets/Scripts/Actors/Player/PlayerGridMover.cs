@@ -6,30 +6,21 @@ using UnityEngine.InputSystem;
  * ---------------
  * Handles tile-by-tile player movement and bump attacks.
  *
+ * This version emits movement noise based on the player's stealth state.
+ *
  * Current player behavior:
  * - receives movement input from the New Input System
  * - converts input into one cardinal grid direction
  * - if an actor is in the target cell, attacks that actor
  * - if the target cell is empty and walkable, moves there
+ * - refreshes FOV after moving
+ * - emits footstep noise after moving
+ * - lowers footstep noise while sneaking
  * - tells TurnManager when a valid move or attack was completed
  *
- * Main responsibilities:
- * - process movement input
- * - block movement input while inventory UI is open
- * - prevent input while enemy turns are processing
- * - trigger bump combat
- * - trigger grid movement
- * - notify TurnManager after successful movement or attack
- *
  * Important:
- * This script no longer automatically uses stairs.
- * Stairs and other map features are now handled by PlayerInteractionController.
- *
- * Later this can expand into:
- * - diagonal movement
- * - bumping doors open
- * - bump interaction options
- * - action energy costs
+ * Sneaking does not currently slow movement.
+ * It only reduces movement noise and enemy detection range through ActorStealth.
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
@@ -39,18 +30,23 @@ public class PlayerGridMover : MonoBehaviour
     [Header("Input")]
     [SerializeField] private InputActionReference moveAction;
 
+    [Header("Noise")]
+    [SerializeField] private int movementNoiseRange = 3;
+
     private MapData mapData;
     private TurnManager turnManager;
     private ActorGridEntity actorGridEntity;
     private ActorCombat actorCombat;
-    private bool isInitialized;
     private PlayerFieldOfView playerFieldOfView;
+    private ActorStealth actorStealth;
+    private bool isInitialized;
 
     private void Awake()
     {
         actorGridEntity = GetComponent<ActorGridEntity>();
         actorCombat = GetComponent<ActorCombat>();
         playerFieldOfView = GetComponent<PlayerFieldOfView>();
+        actorStealth = GetComponent<ActorStealth>();
     }
 
     private void OnEnable()
@@ -76,7 +72,6 @@ public class PlayerGridMover : MonoBehaviour
         mapData = newMapData;
         turnManager = newTurnManager;
 
-        // ActorGridEntity handles map registration and position snapping.
         isInitialized = actorGridEntity.Initialize(mapData, mapRenderer, startPosition);
     }
 
@@ -154,19 +149,27 @@ public class PlayerGridMover : MonoBehaviour
 
         if (moved)
         {
+            EmitMovementNoise();
             RefreshFieldOfView();
             NotifyTurnManager();
         }
     }
 
-    private void NotifyTurnManager()
+    private void EmitMovementNoise()
     {
-        if (turnManager == null)
+        int finalNoiseRange = movementNoiseRange;
+
+        if (actorStealth != null)
         {
-            return;
+            finalNoiseRange = actorStealth.GetModifiedMovementNoiseRange(movementNoiseRange);
         }
 
-        turnManager.PlayerTookAction();
+        GameNoiseSystem.EmitNoise(
+            actorGridEntity.GridPosition,
+            finalNoiseRange,
+            actorGridEntity,
+            NoiseCategory.Movement
+        );
     }
 
     private void RefreshFieldOfView()
@@ -177,5 +180,15 @@ public class PlayerGridMover : MonoBehaviour
         }
 
         playerFieldOfView.RefreshVisibility();
+    }
+
+    private void NotifyTurnManager()
+    {
+        if (turnManager == null)
+        {
+            return;
+        }
+
+        turnManager.PlayerTookAction();
     }
 }

@@ -181,6 +181,24 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Sneak"",
+                    ""type"": ""Button"",
+                    ""id"": ""fe1b274f-892f-4d02-8e5c-5775c3db0fbe"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""RestartRun"",
+                    ""type"": ""Button"",
+                    ""id"": ""4e2b1ed0-6293-49e3-bb75-1cb320be3e27"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -337,6 +355,28 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
                     ""action"": ""Wait"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""49659a0d-00df-4d04-b2db-8a6839209974"",
+                    ""path"": ""<Keyboard>/c"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Sneak"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""30e8d4f1-1ca7-47b9-8639-f7ba94875063"",
+                    ""path"": ""<Keyboard>/enter"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""RestartRun"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -355,6 +395,8 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
         m_Player_DropItem = m_Player.FindAction("Drop Item", throwIfNotFound: true);
         m_Player_Interact = m_Player.FindAction("Interact", throwIfNotFound: true);
         m_Player_Wait = m_Player.FindAction("Wait", throwIfNotFound: true);
+        m_Player_Sneak = m_Player.FindAction("Sneak", throwIfNotFound: true);
+        m_Player_RestartRun = m_Player.FindAction("RestartRun", throwIfNotFound: true);
     }
 
     ~@PlayerInputs()
@@ -445,6 +487,8 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_DropItem;
     private readonly InputAction m_Player_Interact;
     private readonly InputAction m_Player_Wait;
+    private readonly InputAction m_Player_Sneak;
+    private readonly InputAction m_Player_RestartRun;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -496,6 +540,14 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/Wait".
         /// </summary>
         public InputAction @Wait => m_Wrapper.m_Player_Wait;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/Sneak".
+        /// </summary>
+        public InputAction @Sneak => m_Wrapper.m_Player_Sneak;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/RestartRun".
+        /// </summary>
+        public InputAction @RestartRun => m_Wrapper.m_Player_RestartRun;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -552,6 +604,12 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
             @Wait.started += instance.OnWait;
             @Wait.performed += instance.OnWait;
             @Wait.canceled += instance.OnWait;
+            @Sneak.started += instance.OnSneak;
+            @Sneak.performed += instance.OnSneak;
+            @Sneak.canceled += instance.OnSneak;
+            @RestartRun.started += instance.OnRestartRun;
+            @RestartRun.performed += instance.OnRestartRun;
+            @RestartRun.canceled += instance.OnRestartRun;
         }
 
         /// <summary>
@@ -593,6 +651,12 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
             @Wait.started -= instance.OnWait;
             @Wait.performed -= instance.OnWait;
             @Wait.canceled -= instance.OnWait;
+            @Sneak.started -= instance.OnSneak;
+            @Sneak.performed -= instance.OnSneak;
+            @Sneak.canceled -= instance.OnSneak;
+            @RestartRun.started -= instance.OnRestartRun;
+            @RestartRun.performed -= instance.OnRestartRun;
+            @RestartRun.canceled -= instance.OnRestartRun;
         }
 
         /// <summary>
@@ -703,5 +767,19 @@ public partial class @PlayerInputs: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnWait(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "Sneak" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnSneak(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "RestartRun" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnRestartRun(InputAction.CallbackContext context);
     }
 }

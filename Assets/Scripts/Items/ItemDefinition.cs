@@ -18,12 +18,23 @@ using UnityEngine;
  * - store equipment slot information
  * - store basic flat stat modifiers
  * - store consumable effects
+ * - mark an item as Unique
+ * - store unique item flavour text
+ * - store a unique ID so a unique item can be limited to one copy per run
  *
- * The description text is now used by item inspection/tooltips.
+ * Unique item rule:
+ * A unique item is hand-authored. It does not roll random affixes.
+ * Its special identity comes from its authored name, description, flavour text,
+ * and stat modifiers.
  *
  * Important:
- * This does not store random affixes, rarity, rolled damage ranges, or unique
- * item logic yet. Those belong to ItemInstance and future item generation.
+ * This does not yet support special triggered effects like:
+ * - chance to poison
+ * - heal on kill
+ * - fire aura
+ * - teleport on hit
+ *
+ * Those should be added later through a separate item effect system.
  */
 
 [CreateAssetMenu(menuName = "Roguelike/Items/Item Definition")]
@@ -31,9 +42,20 @@ public class ItemDefinition : ScriptableObject
 {
     [Header("Display")]
     [SerializeField] private string displayName = "New Item";
+
     [TextArea(2, 5)]
     [SerializeField] private string description = "";
+
     [SerializeField] private Sprite iconSprite;
+
+    [Header("Unique Item")]
+    [SerializeField] private bool uniqueItem = false;
+
+    [Tooltip("Used to prevent the same unique item from being generated multiple times in one run. If empty, the asset name is used.")]
+    [SerializeField] private string uniqueId = "";
+
+    [TextArea(2, 5)]
+    [SerializeField] private string uniqueFlavorText = "";
 
     [Header("Classification")]
     [SerializeField] private ItemCategory category = ItemCategory.Junk;
@@ -73,6 +95,35 @@ public class ItemDefinition : ScriptableObject
         get
         {
             return iconSprite;
+        }
+    }
+
+    public bool IsUnique
+    {
+        get
+        {
+            return uniqueItem;
+        }
+    }
+
+    public string UniqueId
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(uniqueId))
+            {
+                return uniqueId;
+            }
+
+            return name;
+        }
+    }
+
+    public string UniqueFlavorText
+    {
+        get
+        {
+            return uniqueFlavorText;
         }
     }
 
@@ -153,6 +204,12 @@ public class ItemDefinition : ScriptableObject
 
     private void OnValidate()
     {
+        if (uniqueItem)
+        {
+            stackable = false;
+            maxStackSize = 1;
+        }
+
         if (IsEquipment || category == ItemCategory.Quest)
         {
             stackable = false;

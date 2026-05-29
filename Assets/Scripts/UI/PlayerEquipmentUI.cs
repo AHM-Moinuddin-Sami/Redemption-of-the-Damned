@@ -114,7 +114,7 @@ public class PlayerEquipmentUI : MonoBehaviour
             return;
         }
 
-        builder.AppendLine(item.GetDisplayName());
+        builder.AppendLine(ItemTextFormatter.FormatItemName(item));
     }
 
     private void UnsubscribeFromEquipment()

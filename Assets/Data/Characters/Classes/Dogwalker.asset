@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6e85f5bc486161548bdc9dbfa3c4ee79, type: 3}
+  m_Name: Dogwalker
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterClassDefinition
+  displayName: Knight
+  description: A disgraced knight.
+  statModifiers:
+  - statType: 2
+    value: 1
+  startingItems:
+  - itemDefinition: {fileID: 11400000, guid: 10da81c1ae4b685449d90d062fabd5ce, type: 2}
+    quantity: 1
+  - itemDefinition: {fileID: 11400000, guid: a87cc3c9753fa7947b851eed78985432, type: 2}
+    quantity: 2

@@ -662,6 +662,10 @@ GameObject:
   - component: {fileID: 1041037195802966545}
   - component: {fileID: 1966120068907175556}
   - component: {fileID: 6733018073370823324}
+  - component: {fileID: 4128569888274920797}
+  - component: {fileID: 1871629616075757146}
+  - component: {fileID: 1601594448977374093}
+  - component: {fileID: 1919008795752897726}
   m_Layer: 3
   m_Name: Player Prefab
   m_TagString: Untagged
@@ -708,6 +712,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerGridMover
   moveAction: {fileID: -192866270480450785, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
+  movementNoiseRange: 3
 --- !u!114 &8183387742417766654
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -734,6 +739,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorCombat
   fallbackAttackDamage: 3
+  attackNoiseRange: 10
 --- !u!114 &7281289058217181752
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -873,6 +879,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3bba1fbeec45055409ca7bdaa80c11cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorItemDropper
+  dropNoiseRange: 5
 --- !u!114 &1041037195802966545
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -912,6 +919,73 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerWaitController
   waitAction: {fileID: 9066661805746802309, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
+--- !u!114 &4128569888274920797
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 058da72153975a54f9e51a28e1320ec7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActorStealth
+  startsSneaking: 0
+  sneakingMovementNoiseMultiplier: 0.35
+  minimumSneakingNoiseRange: 1
+  sneakingDetectionRangePenalty: 4
+  minimumDetectionRangeAgainstSneaking: 1
+--- !u!114 &1871629616075757146
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 768043b3e47cd7d4bbf67ca86c174e93, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerStealthController
+  toggleSneakAction: {fileID: 8389800110175569407, guid: c039f0bd4bd013b4aa5e0f3a3562e892, type: 3}
+  toggleConsumesTurn: 1
+--- !u!114 &1601594448977374093
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 322a29cb83600e8428198cd0e077c7af, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterProfile
+  characterName: Wanderer
+  characterClass: {fileID: 11400000, guid: 275139394c4db9d4ebb076e210530834, type: 2}
+  background: {fileID: 11400000, guid: 8ab8ab5b89e696041901697624420eb5, type: 2}
+--- !u!114 &1919008795752897726
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a0bb193c54941d44ac03edc4ccd4fcc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActorExperience
+  startingLevel: 1
+  baseExperienceToNextLevel: 10
+  experienceGrowthPerLevel: 15
+  maxHealthBonusPerLevel: 2
+  attackDamageBonusEveryLevels: 2
+  attackDamageBonusAmount: 1
+  armorBonusEveryLevels: 3
+  armorBonusAmount: 1
+  restoreToFullHealthOnLevelUp: 1
 --- !u!1 &6419676151027369568
 GameObject:
   m_ObjectHideFlags: 0

@@ -161,9 +161,13 @@ public class PlayerInventoryUI : MonoBehaviour
 
     private void OnToggleInventoryPerformed(InputAction.CallbackContext context)
     {
+        if (GameUIState.IsGameOver)
+        {
+            return;
+        }
+
         SetOpen(!isOpen);
     }
-
     private void OnSelectNextItemPerformed(InputAction.CallbackContext context)
     {
         if (!isOpen)
@@ -433,7 +437,7 @@ public class PlayerInventoryUI : MonoBehaviour
 
             builder.Append(i + 1);
             builder.Append(". ");
-            builder.Append(item.GetDisplayName());
+            builder.Append(ItemTextFormatter.FormatItemName(item));
             builder.Append(" [");
             builder.Append(item.Category);
             builder.AppendLine("]");
@@ -451,5 +455,10 @@ public class PlayerInventoryUI : MonoBehaviour
 
         targetInventory.InventoryChanged -= OnInventoryChanged;
         targetInventory = null;
+    }
+
+    public void ForceClose()
+    {
+        SetOpen(false);
     }
 }

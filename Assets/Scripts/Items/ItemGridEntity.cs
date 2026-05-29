@@ -5,35 +5,43 @@ using UnityEngine;
  * --------------
  * Represents an item lying on the dungeon floor.
  *
- * This script connects a visible item GameObject to the gameplay grid.
- * It registers itself into MapData so the current cell knows an item exists there.
+ * This version stores a full ItemInstance instead of only an ItemDefinition.
+ * That matters because rolled items need to keep their rarity and affixes while
+ * lying on the ground.
  *
  * Current responsibilities:
- * - store the item definition
- * - store item quantity
- * - allow spawned items to receive an ItemDefinition from a loot table
- * - register the item into MapData
+ * - store the runtime ItemInstance
+ * - register the ground item into MapData
  * - snap the item visual to the center of its cell
- * - create an ItemInstance when picked up
- * - provide inspect text for the player look command
+ * - return the stored ItemInstance when picked up
+ * - provide inspect text
  * - clear itself from MapData when destroyed
- *
- * Important:
- * Items do not block movement.
- * Actors can stand on the same cell as items.
  */
 
 [RequireComponent(typeof(SpriteRenderer))]
 public class ItemGridEntity : MonoBehaviour
 {
-    [Header("Item")]
+    [Header("Fallback Item")]
     [SerializeField] private ItemDefinition itemDefinition;
     [SerializeField] private int quantity = 1;
+
+    public ItemInstance ItemInstance
+    {
+        get
+        {
+            return itemInstance;
+        }
+    }
 
     public ItemDefinition ItemDefinition
     {
         get
         {
+            if (itemInstance != null)
+            {
+                return itemInstance.Definition;
+            }
+
             return itemDefinition;
         }
     }
@@ -42,12 +50,18 @@ public class ItemGridEntity : MonoBehaviour
     {
         get
         {
-            return quantity;
+            if (itemInstance != null)
+            {
+                return itemInstance.Quantity;
+            }
+
+            return Mathf.Max(1, quantity);
         }
     }
 
     public Vector2Int GridPosition { get; private set; }
 
+    private ItemInstance itemInstance;
     private MapData mapData;
     private MapRenderer mapRenderer;
     private SpriteRenderer spriteRenderer;
@@ -56,6 +70,12 @@ public class ItemGridEntity : MonoBehaviour
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
+
+        if (itemInstance == null && itemDefinition != null)
+        {
+            itemInstance = new ItemInstance(itemDefinition, quantity);
+        }
+
         RefreshVisual();
     }
 
@@ -66,18 +86,50 @@ public class ItemGridEntity : MonoBehaviour
 
     public bool Initialize(MapData newMapData, MapRenderer newMapRenderer, Vector2Int startPosition)
     {
+        if (itemInstance == null && itemDefinition != null)
+        {
+            itemInstance = new ItemInstance(itemDefinition, quantity);
+        }
+
+        return Initialize(newMapData, newMapRenderer, startPosition, itemInstance);
+    }
+
+    public bool Initialize(
+        MapData newMapData,
+        MapRenderer newMapRenderer,
+        Vector2Int startPosition,
+        ItemDefinition newItemDefinition,
+        int newQuantity)
+    {
+        itemInstance = new ItemInstance(newItemDefinition, Mathf.Max(1, newQuantity));
+        itemDefinition = newItemDefinition;
+        quantity = Mathf.Max(1, newQuantity);
+
+        return Initialize(newMapData, newMapRenderer, startPosition, itemInstance);
+    }
+
+    public bool Initialize(
+        MapData newMapData,
+        MapRenderer newMapRenderer,
+        Vector2Int startPosition,
+        ItemInstance newItemInstance)
+    {
         mapData = newMapData;
         mapRenderer = newMapRenderer;
+        itemInstance = newItemInstance;
 
-        if (itemDefinition == null)
+        if (itemInstance == null || itemInstance.Definition == null)
         {
-            Debug.LogError(gameObject.name + " has no ItemDefinition assigned.");
+            Debug.LogError(gameObject.name + " has no valid ItemInstance assigned.");
             return false;
         }
 
+        itemDefinition = itemInstance.Definition;
+        quantity = itemInstance.Quantity;
+
         if (!mapData.TryPlaceItem(this, startPosition))
         {
-            Debug.LogError(itemDefinition.DisplayName + " could not be placed at " + startPosition);
+            Debug.LogError(itemInstance.GetDisplayName() + " could not be placed at " + startPosition);
             return false;
         }
 
@@ -90,27 +142,14 @@ public class ItemGridEntity : MonoBehaviour
         return true;
     }
 
-    public bool Initialize(
-        MapData newMapData,
-        MapRenderer newMapRenderer,
-        Vector2Int startPosition,
-        ItemDefinition newItemDefinition,
-        int newQuantity)
-    {
-        itemDefinition = newItemDefinition;
-        quantity = Mathf.Max(1, newQuantity);
-
-        return Initialize(newMapData, newMapRenderer, startPosition);
-    }
-
     public ItemInstance CreateItemInstance()
     {
-        return new ItemInstance(itemDefinition, Mathf.Max(1, quantity));
+        return itemInstance;
     }
 
     public string GetInspectText()
     {
-        return ItemDescriptionBuilder.Build(itemDefinition, quantity);
+        return ItemDescriptionBuilder.Build(itemInstance);
     }
 
     public void ClearFromMap()
@@ -135,14 +174,14 @@ public class ItemGridEntity : MonoBehaviour
             return;
         }
 
-        if (itemDefinition == null)
+        if (ItemDefinition == null)
         {
             return;
         }
 
-        if (itemDefinition.IconSprite != null)
+        if (ItemDefinition.IconSprite != null)
         {
-            spriteRenderer.sprite = itemDefinition.IconSprite;
+            spriteRenderer.sprite = ItemDefinition.IconSprite;
         }
     }
 
@@ -153,5 +192,35 @@ public class ItemGridEntity : MonoBehaviour
         worldPosition.z = transform.position.z;
 
         transform.position = worldPosition;
+    }
+
+    public string GetDisplayName()
+    {
+        if (itemInstance != null)
+        {
+            return itemInstance.GetDisplayName();
+        }
+
+        if (itemDefinition == null)
+        {
+            return "Unknown Item";
+        }
+
+        if (quantity > 1)
+        {
+            return itemDefinition.DisplayName + " x" + quantity;
+        }
+
+        return itemDefinition.DisplayName;
+    }
+
+    public string GetFormattedDisplayName()
+    {
+        if (itemInstance != null)
+        {
+            return ItemTextFormatter.FormatItemName(itemInstance);
+        }
+
+        return ItemTextFormatter.FormatItemName(itemDefinition, quantity);
     }
 }

@@ -155,16 +155,11 @@ public class PlayerInspectController : MonoBehaviour
 
     private string GetItemDisplayName(ItemGridEntity item)
     {
-        if (item == null || item.ItemDefinition == null)
+        if (item == null)
         {
             return "Unknown Item";
         }
 
-        if (item.Quantity > 1)
-        {
-            return item.ItemDefinition.DisplayName + " x" + item.Quantity;
-        }
-
-        return item.ItemDefinition.DisplayName;
+        return item.GetFormattedDisplayName();
     }
 }

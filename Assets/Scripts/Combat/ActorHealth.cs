@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /*
@@ -5,27 +6,29 @@ using UnityEngine;
  * -----------
  * Stores and manages health for an actor.
  *
- * This script handles:
- * - current health
+ * This version supports:
  * - max health from ActorStats
  * - incoming damage
  * - armor reduction
  * - healing
- * - death
- * - clean message log output
+ * - death detection
+ * - visibility-aware messages
+ * - a Died event so GameBootstrap can detect player death
  *
  * Current armor formula:
  * Final Damage = Incoming Damage - Armor
  * Minimum Final Damage = 1
  *
  * Important:
- * This is still a simple combat health system. Later, this can support damage
- * types, resistances, poison, bleeding, armor penetration, regeneration, and
- * death drops.
+ * Game over is not handled directly inside this script.
+ * This script only announces death through the Died event. GameBootstrap decides
+ * whether that death belongs to the player and then shows the game over UI.
  */
 
 public class ActorHealth : MonoBehaviour
 {
+    public event Action<ActorHealth> Died;
+
     [Header("Fallback Health")]
     [SerializeField] private int fallbackMaxHealth = 10;
 
@@ -58,12 +61,13 @@ public class ActorHealth : MonoBehaviour
     {
         get
         {
-            return CurrentHealth <= 0;
+            return hasDied || CurrentHealth <= 0;
         }
     }
 
     private ActorStats actorStats;
     private ActorGridEntity actorGridEntity;
+    private bool hasDied;
 
     private void Awake()
     {
@@ -71,6 +75,7 @@ public class ActorHealth : MonoBehaviour
         actorGridEntity = GetComponent<ActorGridEntity>();
 
         CurrentHealth = MaxHealth;
+        hasDied = false;
     }
 
     public bool TakeDamage(int incomingDamage)
@@ -85,13 +90,11 @@ public class ActorHealth : MonoBehaviour
 
         CurrentHealth -= finalDamage;
 
-        if (safeIncomingDamage > 0)
-        {
-            GameMessageLog.Write(GetDisplayName() + " takes " + finalDamage + " damage. HP: " + CurrentHealth + "/" + MaxHealth + ".");
-        }
+        WriteDamageMessage(safeIncomingDamage, finalDamage);
 
         if (CurrentHealth <= 0)
         {
+            CurrentHealth = 0;
             Die();
         }
 
@@ -114,7 +117,7 @@ public class ActorHealth : MonoBehaviour
 
         if (CurrentHealth >= MaxHealth)
         {
-            GameMessageLog.Write(GetDisplayName() + " is already at full health.");
+            WriteMessageIfKnown(GetDisplayName() + " is already at full health.");
             return false;
         }
 
@@ -129,7 +132,7 @@ public class ActorHealth : MonoBehaviour
 
         int actualHealedAmount = CurrentHealth - oldHealth;
 
-        GameMessageLog.Write(GetDisplayName() + " heals " + actualHealedAmount + " HP. HP: " + CurrentHealth + "/" + MaxHealth + ".");
+        WriteHealMessage(actualHealedAmount);
 
         return actualHealedAmount > 0;
     }
@@ -147,12 +150,6 @@ public class ActorHealth : MonoBehaviour
         if (finalDamage < minimumDamage)
         {
             finalDamage = minimumDamage;
-        }
-
-        if (armor > 0 && finalDamage < incomingDamage)
-        {
-            int reducedAmount = incomingDamage - finalDamage;
-            GameMessageLog.Write(GetDisplayName() + "'s armor reduces damage by " + reducedAmount + ".");
         }
 
         return finalDamage;
@@ -175,9 +172,93 @@ public class ActorHealth : MonoBehaviour
         return armor;
     }
 
+    private void WriteDamageMessage(int incomingDamage, int finalDamage)
+    {
+        if (incomingDamage <= 0)
+        {
+            return;
+        }
+
+        bool isPlayer = PlayerAwarenessContext.IsPlayer(actorGridEntity);
+        bool isVisible = PlayerAwarenessContext.CanSeeActor(actorGridEntity);
+
+        if (!isPlayer && !isVisible)
+        {
+            return;
+        }
+
+        int reducedAmount = incomingDamage - finalDamage;
+
+        if (reducedAmount > 0)
+        {
+            if (isPlayer)
+            {
+                GameMessageLog.Write("Your armor reduces damage by " + reducedAmount + ".");
+            }
+            else
+            {
+                GameMessageLog.Write(GetDisplayName() + "'s armor reduces damage by " + reducedAmount + ".");
+            }
+        }
+
+        if (isPlayer)
+        {
+            GameMessageLog.Write("You take " + finalDamage + " damage. HP: " + CurrentHealth + "/" + MaxHealth + ".");
+            return;
+        }
+
+        GameMessageLog.Write(GetDisplayName() + " takes " + finalDamage + " damage. HP: " + CurrentHealth + "/" + MaxHealth + ".");
+    }
+
+    private void WriteHealMessage(int healedAmount)
+    {
+        bool isPlayer = PlayerAwarenessContext.IsPlayer(actorGridEntity);
+
+        if (isPlayer)
+        {
+            GameMessageLog.Write("You heal " + healedAmount + " HP. HP: " + CurrentHealth + "/" + MaxHealth + ".");
+            return;
+        }
+
+        if (PlayerAwarenessContext.CanSeeActor(actorGridEntity))
+        {
+            GameMessageLog.Write(GetDisplayName() + " heals " + healedAmount + " HP.");
+        }
+    }
+
+    private void WriteMessageIfKnown(string message)
+    {
+        if (PlayerAwarenessContext.IsPlayer(actorGridEntity) || PlayerAwarenessContext.CanSeeActor(actorGridEntity))
+        {
+            GameMessageLog.Write(message);
+        }
+    }
+
     private void Die()
     {
-        GameMessageLog.Write(GetDisplayName() + " dies.");
+        if (hasDied)
+        {
+            return;
+        }
+
+        hasDied = true;
+
+        bool isPlayer = PlayerAwarenessContext.IsPlayer(actorGridEntity);
+        bool isVisible = PlayerAwarenessContext.CanSeeActor(actorGridEntity);
+
+        if (isPlayer)
+        {
+            GameMessageLog.Write("You die.");
+        }
+        else if (isVisible)
+        {
+            GameMessageLog.Write(GetDisplayName() + " dies.");
+        }
+
+        if (Died != null)
+        {
+            Died.Invoke(this);
+        }
 
         ActorGridEntity gridEntity = GetComponent<ActorGridEntity>();
 
@@ -198,5 +279,10 @@ public class ActorHealth : MonoBehaviour
         }
 
         return actorGridEntity.DisplayName;
+    }
+
+    public void SetToFullHealth()
+    {
+        CurrentHealth = MaxHealth;
     }
 }

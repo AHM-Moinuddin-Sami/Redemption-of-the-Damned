@@ -8,36 +8,22 @@ using UnityEngine;
  *
  * This version supports:
  * - line-of-sight player detection
+ * - reduced detection range against sneaking targets
  * - chasing the player while visible
  * - remembering the player's last known position
- * - giving up after losing sight for several turns
+ * - investigating heard noises
+ * - giving up after losing sight or reaching the investigation point
  * - wandering while unaware
+ * - opening closed doors while chasing/investigating
  *
- * Current enemy behavior:
- * 1. If adjacent to the player, attack.
- * 2. If the player is within detection range and line of sight, become aware.
- * 3. If aware, chase the player or last known player position.
- * 4. If unaware, randomly wander near the enemy's starting position.
- *
- * Main responsibilities:
- * - detect the player fairly using range and line of sight
- * - path toward the player or last known player position
- * - wander when idle
- * - avoid walking into walls, closed doors, blocking features, and other actors
+ * Current stealth behavior:
+ * - if the player is sneaking, this enemy's detection range is reduced
+ * - line of sight is still required
+ * - sound can still reveal the player's approximate position
  *
  * Important:
- * Closed doors block enemy sight and pathing.
- * Enemies do not open doors yet.
- *
- * Later this can expand into:
- * - proper patrol routes
- * - enemies opening doors
- * - sound-based investigation
- * - group alerting
- * - ranged attacks
- * - fleeing
- * - faction behavior
- * - stealth/sneaking
+ * Sneaking is not invisibility.
+ * If the player is very close and in line of sight, the enemy can still detect them.
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
@@ -47,6 +33,13 @@ public class SimpleEnemyAI : MonoBehaviour
     [Header("Detection")]
     [SerializeField] private int detectionRange = 10;
     [SerializeField] private int chaseTurnsAfterLosingSight = 4;
+
+    [Header("Sound")]
+    [SerializeField] private bool canHearNoise = true;
+    [SerializeField] private int investigationTurnsAfterHearingNoise = 6;
+
+    [Header("Doors")]
+    [SerializeField] private bool canOpenDoorsWhileAware = true;
 
     [Header("Wandering")]
     [SerializeField] private bool canWanderWhileUnaware = true;
@@ -69,13 +62,17 @@ public class SimpleEnemyAI : MonoBehaviour
     private ActorGridEntity actorGridEntity;
     private ActorCombat actorCombat;
     private ActorGridEntity playerActor;
+    private ActorStealth playerStealth;
 
     private Vector2Int homePosition;
-    private Vector2Int lastKnownPlayerPosition;
+    private Vector2Int lastKnownTargetPosition;
 
     private int turnsSincePlayerSeen;
-    private bool hasLastKnownPlayerPosition;
+    private int turnsSinceNoiseHeard;
+
+    private bool hasLastKnownTargetPosition;
     private bool isAware;
+    private bool isInvestigatingNoise;
     private bool isInitialized;
 
     private void Awake()
@@ -84,17 +81,36 @@ public class SimpleEnemyAI : MonoBehaviour
         actorCombat = GetComponent<ActorCombat>();
     }
 
+    private void OnEnable()
+    {
+        GameNoiseSystem.NoiseEmitted += OnNoiseEmitted;
+    }
+
+    private void OnDisable()
+    {
+        GameNoiseSystem.NoiseEmitted -= OnNoiseEmitted;
+    }
+
     public void Initialize(MapData newMapData, ActorGridEntity newPlayerActor)
     {
         mapData = newMapData;
         playerActor = newPlayerActor;
+        playerStealth = null;
+
+        if (playerActor != null)
+        {
+            playerStealth = playerActor.GetComponent<ActorStealth>();
+        }
 
         homePosition = actorGridEntity.GridPosition;
-        lastKnownPlayerPosition = Vector2Int.zero;
+        lastKnownTargetPosition = Vector2Int.zero;
 
-        hasLastKnownPlayerPosition = false;
-        isAware = false;
         turnsSincePlayerSeen = 0;
+        turnsSinceNoiseHeard = 0;
+
+        hasLastKnownTargetPosition = false;
+        isAware = false;
+        isInvestigatingNoise = false;
 
         isInitialized = true;
     }
@@ -127,6 +143,58 @@ public class SimpleEnemyAI : MonoBehaviour
         ActWhileUnaware();
     }
 
+    private void OnNoiseEmitted(GameNoiseEvent noiseEvent)
+    {
+        if (!isInitialized)
+        {
+            return;
+        }
+
+        if (!canHearNoise)
+        {
+            return;
+        }
+
+        if (noiseEvent == null)
+        {
+            return;
+        }
+
+        if (noiseEvent.SourceActor == actorGridEntity)
+        {
+            return;
+        }
+
+        int distanceToNoise = GetManhattanDistance(actorGridEntity.GridPosition, noiseEvent.Position);
+
+        if (distanceToNoise > noiseEvent.NoiseRange)
+        {
+            return;
+        }
+
+        if (CanCurrentlySeePlayer())
+        {
+            return;
+        }
+
+        HearNoise(noiseEvent);
+    }
+
+    private void HearNoise(GameNoiseEvent noiseEvent)
+    {
+        isAware = true;
+        isInvestigatingNoise = true;
+        turnsSinceNoiseHeard = 0;
+
+        lastKnownTargetPosition = noiseEvent.Position;
+        hasLastKnownTargetPosition = true;
+
+        if (printAwarenessDebug)
+        {
+            Debug.Log(actorGridEntity.DisplayName + " heard " + noiseEvent.Category + " at " + noiseEvent.Position + ".");
+        }
+    }
+
     private bool TryAttackAdjacentPlayer()
     {
         int distanceToPlayer = GetManhattanDistance(actorGridEntity.GridPosition, playerActor.GridPosition);
@@ -138,10 +206,10 @@ public class SimpleEnemyAI : MonoBehaviour
 
         actorCombat.Attack(playerActor);
 
-        // If the enemy is close enough to attack, it definitely knows where the player is.
         RememberPlayerPosition();
 
         isAware = true;
+        isInvestigatingNoise = false;
         turnsSincePlayerSeen = 0;
 
         return true;
@@ -157,6 +225,7 @@ public class SimpleEnemyAI : MonoBehaviour
             }
 
             isAware = true;
+            isInvestigatingNoise = false;
             turnsSincePlayerSeen = 0;
 
             RememberPlayerPosition();
@@ -168,6 +237,17 @@ public class SimpleEnemyAI : MonoBehaviour
             return;
         }
 
+        if (isInvestigatingNoise)
+        {
+            UpdateNoiseInvestigationTimer();
+            return;
+        }
+
+        UpdateLostSightTimer();
+    }
+
+    private void UpdateLostSightTimer()
+    {
         turnsSincePlayerSeen++;
 
         if (turnsSincePlayerSeen > chaseTurnsAfterLosingSight)
@@ -177,16 +257,31 @@ public class SimpleEnemyAI : MonoBehaviour
                 Debug.Log(actorGridEntity.DisplayName + " lost the player.");
             }
 
-            isAware = false;
-            hasLastKnownPlayerPosition = false;
+            ClearAwareness();
+        }
+    }
+
+    private void UpdateNoiseInvestigationTimer()
+    {
+        turnsSinceNoiseHeard++;
+
+        if (turnsSinceNoiseHeard > investigationTurnsAfterHearingNoise)
+        {
+            if (printAwarenessDebug)
+            {
+                Debug.Log(actorGridEntity.DisplayName + " stopped investigating noise.");
+            }
+
+            ClearAwareness();
         }
     }
 
     private bool CanCurrentlySeePlayer()
     {
         int distanceToPlayer = GetManhattanDistance(actorGridEntity.GridPosition, playerActor.GridPosition);
+        int effectiveDetectionRange = GetEffectiveDetectionRangeAgainstPlayer();
 
-        if (distanceToPlayer > detectionRange)
+        if (distanceToPlayer > effectiveDetectionRange)
         {
             return false;
         }
@@ -198,10 +293,20 @@ public class SimpleEnemyAI : MonoBehaviour
         );
     }
 
+    private int GetEffectiveDetectionRangeAgainstPlayer()
+    {
+        if (playerStealth == null)
+        {
+            return detectionRange;
+        }
+
+        return playerStealth.GetDetectionRangeAgainstActor(detectionRange);
+    }
+
     private void RememberPlayerPosition()
     {
-        lastKnownPlayerPosition = playerActor.GridPosition;
-        hasLastKnownPlayerPosition = true;
+        lastKnownTargetPosition = playerActor.GridPosition;
+        hasLastKnownTargetPosition = true;
     }
 
     private void ActWhileAware()
@@ -212,19 +317,29 @@ public class SimpleEnemyAI : MonoBehaviour
             return;
         }
 
-        if (!hasLastKnownPlayerPosition)
+        if (!hasLastKnownTargetPosition)
         {
+            ClearAwareness();
             return;
         }
 
-        if (actorGridEntity.GridPosition == lastKnownPlayerPosition)
+        if (actorGridEntity.GridPosition == lastKnownTargetPosition)
         {
-            isAware = false;
-            hasLastKnownPlayerPosition = false;
+            ClearAwareness();
             return;
         }
 
-        TryPathToward(lastKnownPlayerPosition, false);
+        TryPathToward(lastKnownTargetPosition, false);
+    }
+
+    private void ClearAwareness()
+    {
+        isAware = false;
+        isInvestigatingNoise = false;
+        hasLastKnownTargetPosition = false;
+
+        turnsSincePlayerSeen = 0;
+        turnsSinceNoiseHeard = 0;
     }
 
     private void ActWhileUnaware()
@@ -276,8 +391,6 @@ public class SimpleEnemyAI : MonoBehaviour
             return false;
         }
 
-        // Keep idle wandering near the enemy's spawn point.
-        // This prevents enemies from randomly drifting across the whole dungeon.
         int distanceFromHome = GetManhattanDistance(homePosition, targetPosition);
 
         if (distanceFromHome > maxWanderDistanceFromHome)
@@ -296,7 +409,8 @@ public class SimpleEnemyAI : MonoBehaviour
             mapData,
             actorGridEntity.GridPosition,
             targetPosition,
-            detectionRange + chaseTurnsAfterLosingSight,
+            detectionRange + chaseTurnsAfterLosingSight + investigationTurnsAfterHearingNoise,
+            canOpenDoorsWhileAware,
             out path
         );
 
@@ -312,6 +426,11 @@ public class SimpleEnemyAI : MonoBehaviour
 
         Vector2Int nextStep = path[1];
 
+        if (TryOpenDoorAtNextStep(nextStep))
+        {
+            return;
+        }
+
         if (targetIsPlayer)
         {
             ActorGridEntity actorAtNextStep = mapData.GetActorAt(nextStep);
@@ -324,6 +443,49 @@ public class SimpleEnemyAI : MonoBehaviour
         }
 
         TryMoveToNextStep(nextStep);
+    }
+
+    private bool TryOpenDoorAtNextStep(Vector2Int nextStep)
+    {
+        if (!canOpenDoorsWhileAware)
+        {
+            return false;
+        }
+
+        DoorFeature door = mapData.GetDoorAt(nextStep);
+
+        if (door == null)
+        {
+            return false;
+        }
+
+        if (door.IsOpen)
+        {
+            return false;
+        }
+
+        return door.TryOpen("A door opens.", "You hear a door open.", actorGridEntity);
+    }
+
+    public void ApplyEnemyDefinition(EnemyDefinition enemyDefinition)
+    {
+        if (enemyDefinition == null)
+        {
+            return;
+        }
+
+        detectionRange = enemyDefinition.DetectionRange;
+        chaseTurnsAfterLosingSight = enemyDefinition.ChaseTurnsAfterLosingSight;
+
+        canHearNoise = enemyDefinition.CanHearNoise;
+        investigationTurnsAfterHearingNoise = enemyDefinition.InvestigationTurnsAfterHearingNoise;
+
+        canOpenDoorsWhileAware = enemyDefinition.CanOpenDoorsWhileAware;
+
+        canWanderWhileUnaware = enemyDefinition.CanWanderWhileUnaware;
+        wanderChancePercent = enemyDefinition.WanderChancePercent;
+        maxWanderDistanceFromHome = enemyDefinition.MaxWanderDistanceFromHome;
+        wanderDirectionAttempts = enemyDefinition.WanderDirectionAttempts;
     }
 
     private void TryMoveToNextStep(Vector2Int nextStep)

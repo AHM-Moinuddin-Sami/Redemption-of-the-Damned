@@ -5,39 +5,18 @@ using UnityEngine;
  * ----------------
  * Handles dropping inventory items onto the ground at the actor's current grid cell.
  *
- * This script belongs on an actor that has:
- * - ActorGridEntity
- * - ActorInventory
- *
- * Current behavior:
- * - receives an ItemInstance from UI or another controller
- * - creates a ground item at the actor's current grid position
- * - removes the item from inventory only if the ground item was placed successfully
- * - drops the entire selected stack for stackable items
- *
- * Example:
- * Inventory has Bread x3.
- * Player drops Bread.
- * Bread x3 appears on the ground.
- * Bread x3 is removed from inventory.
- *
- * Important:
- * This does not split stacks yet.
- * It also does not choose nearby empty cells if the current tile cannot accept the item.
- *
- * Later this can expand into:
- * - drop one item from a stack
- * - drop custom quantity
- * - drop to adjacent tile if current tile is blocked
- * - throw item
- * - container transfer
- * - item pile merging
+ * This version preserves rolled item data.
+ * If the player drops a Rare sword, the ground item keeps the same rarity and
+ * affixes instead of becoming a plain base sword.
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
 [RequireComponent(typeof(ActorInventory))]
 public class ActorItemDropper : MonoBehaviour
 {
+    [Header("Noise")]
+    [SerializeField] private int dropNoiseRange = 5;
+
     private MapData mapData;
     private MapRenderer mapRenderer;
     private ItemGridEntity groundItemPrefab;
@@ -87,15 +66,13 @@ public class ActorItemDropper : MonoBehaviour
         }
 
         Vector2Int dropPosition = actorGridEntity.GridPosition;
-
         ItemGridEntity droppedItem = Instantiate(groundItemPrefab, itemParent);
 
         bool placed = droppedItem.Initialize(
             mapData,
             mapRenderer,
             dropPosition,
-            itemInstance.Definition,
-            itemInstance.Quantity
+            itemInstance
         );
 
         if (!placed)
@@ -116,8 +93,19 @@ public class ActorItemDropper : MonoBehaviour
             return false;
         }
 
-        GameMessageLog.Write(gameObject.name + " drops " + itemInstance.GetDisplayName() + ".");
+        GameMessageLog.Write(gameObject.name + " drops " + ItemTextFormatter.FormatItemName(itemInstance) + ".");
+        EmitDropNoise();
 
         return true;
+    }
+
+    private void EmitDropNoise()
+    {
+        GameNoiseSystem.EmitNoise(
+            actorGridEntity.GridPosition,
+            dropNoiseRange,
+            actorGridEntity,
+            NoiseCategory.Item
+        );
     }
 }

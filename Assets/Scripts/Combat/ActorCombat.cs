@@ -5,18 +5,21 @@ using UnityEngine;
  * -----------
  * Handles basic direct attacks between actors.
  *
- * This script now sends player-facing combat messages to GameMessageLog instead
- * of relying on raw Debug.Log output.
+ * This version:
+ * - reads attack damage from ActorStats
+ * - writes visibility-aware attack messages
+ * - emits combat noise so nearby enemies can investigate
  *
- * Current responsibilities:
- * - read attack damage from ActorStats
- * - receive a target actor
- * - find the target's ActorHealth component
- * - apply damage to the target
- * - show a clean combat message in the message log
+ * Current message examples:
+ * - You attack Rat for 6 damage.
+ * - Rat attacks you for 2 damage.
+ * - Something attacks you for 2 damage.
+ *
+ * Current noise behavior:
+ * - every successful attack emits combat noise from the attacker's position
  *
  * Important:
- * Armor reduction is handled by ActorHealth.
+ * Armor reduction and death messages are handled by ActorHealth.
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
@@ -24,6 +27,9 @@ public class ActorCombat : MonoBehaviour
 {
     [Header("Fallback Combat")]
     [SerializeField] private int fallbackAttackDamage = 3;
+
+    [Header("Noise")]
+    [SerializeField] private int attackNoiseRange = 10;
 
     private ActorStats actorStats;
     private ActorGridEntity actorGridEntity;
@@ -56,7 +62,8 @@ public class ActorCombat : MonoBehaviour
 
         int damage = GetAttackDamage();
 
-        GameMessageLog.Write(GetDisplayName() + " attacks " + target.DisplayName + " for " + damage + " damage.");
+        WriteAttackMessage(target, damage);
+        EmitAttackNoise();
 
         return targetHealth.TakeDamage(damage);
     }
@@ -78,13 +85,49 @@ public class ActorCombat : MonoBehaviour
         return attackDamage;
     }
 
-    private string GetDisplayName()
+    private void EmitAttackNoise()
     {
         if (actorGridEntity == null)
         {
-            return gameObject.name;
+            return;
         }
 
-        return actorGridEntity.DisplayName;
+        GameNoiseSystem.EmitNoise(
+            actorGridEntity.GridPosition,
+            attackNoiseRange,
+            actorGridEntity,
+            NoiseCategory.Combat
+        );
+    }
+
+    private void WriteAttackMessage(ActorGridEntity target, int damage)
+    {
+        bool attackerIsPlayer = PlayerAwarenessContext.IsPlayer(actorGridEntity);
+        bool targetIsPlayer = PlayerAwarenessContext.IsPlayer(target);
+        bool attackerVisible = PlayerAwarenessContext.CanSeeActor(actorGridEntity);
+        bool targetVisible = PlayerAwarenessContext.CanSeeActor(target);
+
+        if (attackerIsPlayer)
+        {
+            GameMessageLog.Write("You attack " + target.DisplayName + " for " + damage + " damage.");
+            return;
+        }
+
+        if (targetIsPlayer)
+        {
+            if (attackerVisible)
+            {
+                GameMessageLog.Write(actorGridEntity.DisplayName + " attacks you for " + damage + " damage.");
+                return;
+            }
+
+            GameMessageLog.Write("Something attacks you for " + damage + " damage.");
+            return;
+        }
+
+        if (attackerVisible || targetVisible)
+        {
+            GameMessageLog.Write(actorGridEntity.DisplayName + " attacks " + target.DisplayName + " for " + damage + " damage.");
+        }
     }
 }

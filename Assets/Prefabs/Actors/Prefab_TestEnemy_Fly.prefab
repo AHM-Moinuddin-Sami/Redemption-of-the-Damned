@@ -14,6 +14,9 @@ GameObject:
   - component: {fileID: 7964692312830200215}
   - component: {fileID: 6766680558584659519}
   - component: {fileID: 1084170450719549260}
+  - component: {fileID: -2428662360251199344}
+  - component: {fileID: 6254106002730494855}
+  - component: {fileID: 7067190621501131754}
   m_Layer: 0
   m_Name: Prefab_TestEnemy_Fly
   m_TagString: Untagged
@@ -121,6 +124,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorCombat
   fallbackAttackDamage: 3
+  attackNoiseRange: 10
 --- !u!114 &6766680558584659519
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -149,8 +153,51 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SimpleEnemyAI
   detectionRange: 10
   chaseTurnsAfterLosingSight: 4
+  canHearNoise: 1
+  investigationTurnsAfterHearingNoise: 6
+  canOpenDoorsWhileAware: 1
   canWanderWhileUnaware: 1
   wanderChancePercent: 100
   maxWanderDistanceFromHome: 6
   wanderDirectionAttempts: 4
   printAwarenessDebug: 0
+--- !u!114 &-2428662360251199344
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2987601820076237333}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4666d7acaf754a34aabc927e3f78cdca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExperienceReward
+  experienceAmount: 10
+--- !u!114 &6254106002730494855
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2987601820076237333}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2cb3d0c1c1405054882c78e0f539d23b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActorStats
+  baseMaxHealth: 10
+  baseAttackDamage: 3
+  baseArmor: 0
+--- !u!114 &7067190621501131754
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2987601820076237333}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09f239cec3b616541a924257cf81f604, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyDefinitionApplier

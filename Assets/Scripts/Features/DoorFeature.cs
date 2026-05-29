@@ -5,16 +5,16 @@ using UnityEngine;
  * -----------
  * Represents an interactable door on the grid.
  *
- * Doors are map features. A closed door blocks movement and sight. An open door
- * allows movement and vision through.
+ * This version:
+ * - blocks movement and sight while closed
+ * - allows movement and sight while open
+ * - writes visibility-aware door messages
+ * - emits door noise when opened or closed
  *
- * Current behavior:
- * - starts closed by default
- * - closed door blocks movement
- * - closed door blocks sight
- * - open door does not block movement or sight
- * - changing state updates the sprite
- * - closing is prevented if an actor is standing on the door tile
+ * Door noise lets enemies investigate door usage.
+ *
+ * Important:
+ * The sourceActor parameter lets enemies ignore their own door sounds.
  */
 
 [RequireComponent(typeof(MapFeatureEntity))]
@@ -27,6 +27,9 @@ public class DoorFeature : MonoBehaviour
     [Header("Sprites")]
     [SerializeField] private Sprite closedSprite;
     [SerializeField] private Sprite openSprite;
+
+    [Header("Sound Awareness")]
+    [SerializeField] private int hearingRange = 8;
 
     public bool IsOpen { get; private set; }
 
@@ -59,36 +62,61 @@ public class DoorFeature : MonoBehaviour
         return true;
     }
 
-    public void Toggle()
+    public bool Toggle()
     {
-        if (IsOpen)
-        {
-            TryClose();
-            return;
-        }
-
-        Open();
+        return Toggle(null);
     }
 
-    public void Open()
+    public bool Toggle(ActorGridEntity sourceActor)
     {
         if (IsOpen)
         {
-            GameMessageLog.Write("The door is already open.");
-            return;
+            return TryClose("You close the door.", "You hear a door close.", sourceActor);
+        }
+
+        return TryOpen("You open the door.", "You hear a door open.", sourceActor);
+    }
+
+    public bool TryOpen(string visibleMessage)
+    {
+        return TryOpen(visibleMessage, "You hear a door open.", null);
+    }
+
+    public bool TryOpen(string visibleMessage, string heardMessage)
+    {
+        return TryOpen(visibleMessage, heardMessage, null);
+    }
+
+    public bool TryOpen(string visibleMessage, string heardMessage, ActorGridEntity sourceActor)
+    {
+        if (IsOpen)
+        {
+            return false;
         }
 
         IsOpen = true;
         ApplyDoorState();
 
-        GameMessageLog.Write("You open the door.");
+        WriteDoorMessage(visibleMessage, heardMessage);
+        EmitDoorNoise(sourceActor);
+
+        return true;
     }
 
-    public bool TryClose()
+    public bool TryClose(string visibleMessage)
+    {
+        return TryClose(visibleMessage, "You hear a door close.", null);
+    }
+
+    public bool TryClose(string visibleMessage, string heardMessage)
+    {
+        return TryClose(visibleMessage, heardMessage, null);
+    }
+
+    public bool TryClose(string visibleMessage, string heardMessage, ActorGridEntity sourceActor)
     {
         if (!IsOpen)
         {
-            GameMessageLog.Write("The door is already closed.");
             return false;
         }
 
@@ -106,7 +134,8 @@ public class DoorFeature : MonoBehaviour
         IsOpen = false;
         ApplyDoorState();
 
-        GameMessageLog.Write("You close the door.");
+        WriteDoorMessage(visibleMessage, heardMessage);
+        EmitDoorNoise(sourceActor);
 
         return true;
     }
@@ -138,5 +167,48 @@ public class DoorFeature : MonoBehaviour
         {
             spriteRenderer.sprite = closedSprite;
         }
+    }
+
+    private void WriteDoorMessage(string visibleMessage, string heardMessage)
+    {
+        if (mapFeatureEntity == null)
+        {
+            return;
+        }
+
+        Vector2Int position = mapFeatureEntity.GridPosition;
+
+        if (PlayerAwarenessContext.CanSee(position))
+        {
+            if (!string.IsNullOrWhiteSpace(visibleMessage))
+            {
+                GameMessageLog.Write(visibleMessage);
+            }
+
+            return;
+        }
+
+        if (PlayerAwarenessContext.CanHear(position, hearingRange))
+        {
+            if (!string.IsNullOrWhiteSpace(heardMessage))
+            {
+                GameMessageLog.Write(heardMessage);
+            }
+        }
+    }
+
+    private void EmitDoorNoise(ActorGridEntity sourceActor)
+    {
+        if (mapFeatureEntity == null)
+        {
+            return;
+        }
+
+        GameNoiseSystem.EmitNoise(
+            mapFeatureEntity.GridPosition,
+            hearingRange,
+            sourceActor,
+            NoiseCategory.Door
+        );
     }
 }

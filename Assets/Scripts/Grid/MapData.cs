@@ -348,6 +348,11 @@ public class MapData
 
     public bool IsPathableForActor(Vector2Int position, Vector2Int goalPosition)
     {
+        return IsPathableForActor(position, goalPosition, false);
+    }
+
+    public bool IsPathableForActor(Vector2Int position, Vector2Int goalPosition, bool allowClosedDoors)
+    {
         MapCell cell = GetCell(position);
 
         if (cell == null)
@@ -355,26 +360,33 @@ public class MapData
             return false;
         }
 
-        // Terrain still blocks pathing.
         if (cell.BlocksMovement)
         {
             return false;
         }
 
-        // Closed doors and future blocking features block pathing.
         if (cell.HasBlockingFeature)
         {
-            return false;
+            if (!allowClosedDoors)
+            {
+                return false;
+            }
+
+            DoorFeature door = GetDoorAt(position);
+
+            if (door == null)
+            {
+                return false;
+            }
         }
 
-        // The goal position is allowed even if it has the player standing on it.
+        // The goal position is allowed even if the player is standing on it.
         // This lets enemies path toward the player.
         if (position == goalPosition)
         {
             return true;
         }
 
-        // Other occupied actor cells block pathing.
         if (cell.HasActor)
         {
             return false;
@@ -403,5 +415,17 @@ public class MapData
         }
 
         return false;
+    }
+
+    public DoorFeature GetDoorAt(Vector2Int position)
+    {
+        MapFeatureEntity feature = GetFeatureAt(position);
+
+        if (feature == null)
+        {
+            return null;
+        }
+
+        return feature.GetComponent<DoorFeature>();
     }
 }

@@ -1,13 +1,17 @@
 /*
  * GameUIState
  * -----------
- * Stores simple global UI state flags.
+ * Stores simple global UI/gameplay blocking flags.
  *
- * Current responsibility:
- * - tells gameplay input scripts whether the inventory UI is currently open
+ * Current responsibilities:
+ * - track whether the inventory UI is open
+ * - track whether the run is over
+ * - expose one helper property for gameplay input blocking
  *
- * This is used so the player does not move, pick up items, or inspect the floor
- * while the inventory is open.
+ * Why this exists:
+ * Different player input scripts need to know when normal gameplay input should
+ * be ignored. For example, movement should not happen while the inventory is
+ * open, and no gameplay input should happen after the player dies.
  *
  * Later this can expand into:
  * - dialogue open
@@ -20,4 +24,19 @@
 public static class GameUIState
 {
     public static bool IsInventoryOpen { get; set; }
+    public static bool IsGameOver { get; set; }
+
+    public static bool IsGameplayInputBlocked
+    {
+        get
+        {
+            return IsInventoryOpen || IsGameOver;
+        }
+    }
+
+    public static void Reset()
+    {
+        IsInventoryOpen = false;
+        IsGameOver = false;
+    }
 }

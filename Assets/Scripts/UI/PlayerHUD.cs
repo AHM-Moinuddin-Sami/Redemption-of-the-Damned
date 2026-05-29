@@ -6,16 +6,18 @@ using UnityEngine;
  * ---------
  * Displays the player's important runtime stats on the screen.
  *
- * This is the first simple HUD for the roguelike prototype.
- * It reads data from the currently spawned player and updates the UI text.
- *
  * Current displayed values:
+ * - character name
+ * - class/background
  * - current dungeon floor
+ * - level
+ * - XP
  * - player HP
  * - hunger
  * - thirst
  * - attack damage
  * - armor
+ * - stance/mode
  *
  * Main responsibilities:
  * - receive the current player reference from GameBootstrap
@@ -25,15 +27,6 @@ using UnityEngine;
  * Important:
  * This HUD does not control gameplay.
  * It only reads values from gameplay systems and displays them.
- *
- * Later this can expand into:
- * - HP bars
- * - hunger/thirst bars
- * - equipment icons
- * - inventory button
- * - message log integration
- * - status effect icons
- * - minimap
  */
 
 public class PlayerHUD : MonoBehaviour
@@ -45,6 +38,9 @@ public class PlayerHUD : MonoBehaviour
     private ActorHealth playerHealth;
     private ActorSurvival playerSurvival;
     private ActorStats playerStats;
+    private ActorStealth playerStealth;
+    private ActorExperience playerExperience;
+    private PlayerCharacterProfile playerProfile;
 
     private int currentFloorNumber;
 
@@ -59,10 +55,12 @@ public class PlayerHUD : MonoBehaviour
             return;
         }
 
-        // Cache the components so Update does not repeatedly call GetComponent.
         playerHealth = playerActor.GetComponent<ActorHealth>();
         playerSurvival = playerActor.GetComponent<ActorSurvival>();
         playerStats = playerActor.GetComponent<ActorStats>();
+        playerStealth = playerActor.GetComponent<ActorStealth>();
+        playerExperience = playerActor.GetComponent<ActorExperience>();
+        playerProfile = playerActor.GetComponent<PlayerCharacterProfile>();
 
         RefreshHUD();
     }
@@ -84,19 +82,49 @@ public class PlayerHUD : MonoBehaviour
             return;
         }
 
-        string hpText = GetHealthText();
-        string hungerText = GetHungerText();
-        string thirstText = GetThirstText();
-        string attackText = GetAttackDamageText();
-        string armorText = GetArmorText();
-
         statusText.text =
-            "Floor: " + currentFloorNumber +
-            "\nHP: " + hpText +
-            "\nHunger: " + hungerText +
-            "\nThirst: " + thirstText +
-            "\nAttack: " + attackText +
-            "\nArmor: " + armorText;
+            GetProfileText() +
+            "\nFloor: " + currentFloorNumber +
+            "\nLevel: " + GetLevelText() +
+            "\nXP: " + GetExperienceText() +
+            "\nHP: " + GetHealthText() +
+            "\nHunger: " + GetHungerText() +
+            "\nThirst: " + GetThirstText() +
+            "\nAttack: " + GetAttackDamageText() +
+            "\nArmor: " + GetArmorText() +
+            "\nMode: " + GetModeText();
+    }
+
+    private string GetProfileText()
+    {
+        if (playerProfile == null)
+        {
+            return "Character: Unknown";
+        }
+
+        return playerProfile.CharacterName +
+               "\n" + playerProfile.BackgroundName +
+               " " + playerProfile.ClassName;
+    }
+
+    private string GetLevelText()
+    {
+        if (playerExperience == null)
+        {
+            return "-";
+        }
+
+        return playerExperience.CurrentLevel.ToString();
+    }
+
+    private string GetExperienceText()
+    {
+        if (playerExperience == null)
+        {
+            return "-";
+        }
+
+        return playerExperience.CurrentExperience + "/" + playerExperience.ExperienceToNextLevel;
     }
 
     private string GetHealthText()
@@ -147,6 +175,21 @@ public class PlayerHUD : MonoBehaviour
         }
 
         return playerStats.GetStat(StatType.Armor).ToString();
+    }
+
+    private string GetModeText()
+    {
+        if (playerStealth == null)
+        {
+            return "Normal";
+        }
+
+        if (playerStealth.IsSneaking)
+        {
+            return "Sneaking";
+        }
+
+        return "Normal";
     }
 
     private void ClearHUD()

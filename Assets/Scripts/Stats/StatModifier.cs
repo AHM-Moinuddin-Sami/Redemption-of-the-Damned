@@ -15,19 +15,22 @@ using UnityEngine;
  * - Stat Type: AttackDamage
  * - Value: 3
  *
- * Old Shield:
- * - Stat Type: Armor
+ * Fighter class:
+ * - Stat Type: MaxHealth
+ * - Value: 5
+ *
+ * Level-up bonus:
+ * - Stat Type: MaxHealth
  * - Value: 2
  *
  * Important:
- * This is intentionally simple right now.
- * Later, this can become a more advanced Path of Exile-style modifier system
- * with:
+ * This version includes constructors so runtime systems, like level-up logic,
+ * can create stat modifiers through code.
+ *
+ * Later, this can become a more advanced modifier system with:
  * - flat modifiers
  * - increased modifiers
  * - more modifiers
- * - local weapon modifiers
- * - global modifiers
  * - conditional modifiers
  * - affix tiers
  */
@@ -52,5 +55,15 @@ public class StatModifier
         {
             return value;
         }
+    }
+
+    public StatModifier()
+    {
+    }
+
+    public StatModifier(StatType newStatType, int newValue)
+    {
+        statType = newStatType;
+        value = newValue;
     }
 }

@@ -3,29 +3,34 @@ using UnityEngine;
 /*
  * ActorGridEntity
  * ---------------
- * Represents an actor that occupies one cell on the gameplay grid.
+ * Represents an actor's position on the gameplay grid.
  *
- * This script is used by both the player and enemies. It stores the actor's
- * current grid position and registers the actor inside MapData so the map knows
- * which cells are occupied.
+ * This script connects an actor GameObject to MapData. It stores the actor's
+ * grid position, registers the actor into the current MapData, moves the actor
+ * through the grid, and snaps the actor's world position to the Tilemap cell.
  *
- * Main responsibilities:
- * - store the actor's grid position
- * - register the actor into MapData
- * - move the actor between grid cells
- * - keep the actor visually snapped to the center of its current tile
- * - clear the actor from MapData when destroyed
+ * Current responsibilities:
+ * - store actor display name
+ * - store current grid position
+ * - register actor into MapData
+ * - clear actor from MapData
+ * - move actor one grid cell at a time
+ * - snap actor visual position to the center of a cell
+ * - support reinitializing the same actor onto a new floor
  *
  * Important:
- * This script does not handle input.
- * Player input belongs in PlayerGridMover.
+ * Reinitialization matters because the player now persists between floors.
+ * When the player descends, we do not destroy and respawn the player anymore.
+ * Instead, the same player object is cleared from the old MapData and placed
+ * into the new MapData at the new floor's spawn position.
  *
- * This script also does not handle AI.
- * Enemy AI will later tell ActorGridEntity where to move.
- *
- * OnDestroy matters because when an enemy dies, the GameObject is destroyed.
- * If we do not clear the actor from MapData, the cell would stay permanently
- * occupied even though the enemy is gone.
+ * Later this can expand into:
+ * - actor facing direction
+ * - movement animation hooks
+ * - actor size larger than 1 tile
+ * - forced movement
+ * - teleportation
+ * - knockback
  */
 
 public class ActorGridEntity : MonoBehaviour
@@ -54,11 +59,25 @@ public class ActorGridEntity : MonoBehaviour
 
     public bool Initialize(MapData newMapData, MapRenderer newMapRenderer, Vector2Int startPosition)
     {
+        // If this actor was already registered into a previous map, clear it first.
+        // This is required for persistent actors such as the player when changing floors.
+        ClearFromMap();
+
         mapData = newMapData;
         mapRenderer = newMapRenderer;
 
-        // Register this actor into the map occupancy data.
-        // If this fails, the actor was spawned on an invalid or occupied cell.
+        if (mapData == null)
+        {
+            Debug.LogError(displayName + " cannot initialize because MapData is missing.");
+            return false;
+        }
+
+        if (mapRenderer == null)
+        {
+            Debug.LogError(displayName + " cannot initialize because MapRenderer is missing.");
+            return false;
+        }
+
         if (!mapData.TryPlaceActor(this, startPosition))
         {
             Debug.LogError(displayName + " could not be placed at " + startPosition);
@@ -80,15 +99,20 @@ public class ActorGridEntity : MonoBehaviour
             return false;
         }
 
+        if (direction == Vector2Int.zero)
+        {
+            return false;
+        }
+
         Vector2Int targetPosition = GridPosition + direction;
 
-        // MapData handles terrain blocking and actor occupancy blocking.
         if (!mapData.TryMoveActor(this, GridPosition, targetPosition))
         {
             return false;
         }
 
         GridPosition = targetPosition;
+
         SnapToGridPosition();
 
         return true;
@@ -113,9 +137,19 @@ public class ActorGridEntity : MonoBehaviour
     {
         Vector3 worldPosition = mapRenderer.GetCellCenterWorld(GridPosition);
 
-        // Preserve the actor's Z value so sorting/depth is not changed.
+        // Preserve the actor's Z value so sorting/depth stays controlled by prefab setup.
         worldPosition.z = transform.position.z;
 
         transform.position = worldPosition;
+    }
+
+    public void SetDisplayName(string newDisplayName)
+    {
+        if (string.IsNullOrWhiteSpace(newDisplayName))
+        {
+            return;
+        }
+
+        displayName = newDisplayName;
     }
 }

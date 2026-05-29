@@ -11,24 +11,12 @@ using UnityEngine;
  * 2. Player survival updates.
  * 3. Field of view refreshes.
  * 4. Enemies take turns.
- * 5. Field of view refreshes again so enemy visibility updates.
+ * 5. Field of view refreshes again.
  * 6. Control returns to the player.
  *
- * A valid player action is currently:
- * - moving one tile
- * - attacking an enemy by bumping into it
- * - picking up items
- * - equipping an item
- * - using an item
- * - dropping an item
- * - opening/closing a door
- *
- * Invalid actions, such as walking into a wall, do not consume a turn.
- *
- * Important:
- * This is not a speed/energy scheduler yet.
- * Later, this can evolve into a proper roguelike time system where actions have
- * different costs and actors act according to speed.
+ * This version also respects game over state.
+ * If GameUIState.IsGameOver is true, the player can no longer act and enemy
+ * turn processing stops mattering.
  */
 
 public class TurnManager : MonoBehaviour
@@ -45,7 +33,8 @@ public class TurnManager : MonoBehaviour
     {
         get
         {
-            return !isProcessingEnemyTurns &&
+            return !GameUIState.IsGameOver &&
+                   !isProcessingEnemyTurns &&
                    playerActor != null &&
                    playerActor.gameObject.activeInHierarchy;
         }
@@ -57,6 +46,7 @@ public class TurnManager : MonoBehaviour
         playerActor = newPlayerActor;
         playerSurvival = null;
         playerFieldOfView = null;
+        isProcessingEnemyTurns = false;
 
         if (playerActor != null)
         {
@@ -85,6 +75,12 @@ public class TurnManager : MonoBehaviour
         }
 
         ProcessPlayerActionEffects();
+
+        if (!CanPlayerAct)
+        {
+            return;
+        }
+
         RefreshPlayerFieldOfView();
 
         if (!CanPlayerAct)
@@ -108,10 +104,20 @@ public class TurnManager : MonoBehaviour
 
     private void ProcessEnemyTurns()
     {
+        if (GameUIState.IsGameOver)
+        {
+            return;
+        }
+
         isProcessingEnemyTurns = true;
 
         for (int i = 0; i < enemies.Count; i++)
         {
+            if (GameUIState.IsGameOver)
+            {
+                break;
+            }
+
             SimpleEnemyAI enemy = enemies[i];
 
             if (enemy == null)

@@ -11,16 +11,13 @@ using UnityEngine.InputSystem;
  * - checks adjacent tiles next
  * - uses stairs if standing on stairs
  * - toggles doors if next to a door
+ * - passes the player actor as the source of door noise
  * - ignores interaction while inventory UI is open
  * - ignores interaction while enemy turns are processing
  *
  * Current supported features:
  * - StairsDownFeature
  * - DoorFeature
- *
- * Important:
- * Stairs do not consume a turn because the floor changes immediately.
- * Doors do consume a turn because opening/closing a door is a normal action.
  */
 
 [RequireComponent(typeof(ActorGridEntity))]
@@ -32,8 +29,8 @@ public class PlayerInteractionController : MonoBehaviour
     private MapData mapData;
     private TurnManager turnManager;
     private ActorGridEntity actorGridEntity;
-    private bool isInitialized;
     private PlayerFieldOfView playerFieldOfView;
+    private bool isInitialized;
 
     private readonly Vector2Int[] adjacentDirections =
     {
@@ -98,7 +95,7 @@ public class PlayerInteractionController : MonoBehaviour
     {
         MapFeatureEntity currentTileFeature = mapData.GetFeatureAt(actorGridEntity.GridPosition);
 
-        if (TryUseFeature(currentTileFeature, false))
+        if (TryUseFeature(currentTileFeature))
         {
             return;
         }
@@ -108,7 +105,7 @@ public class PlayerInteractionController : MonoBehaviour
             Vector2Int checkPosition = actorGridEntity.GridPosition + adjacentDirections[i];
             MapFeatureEntity adjacentFeature = mapData.GetFeatureAt(checkPosition);
 
-            if (TryUseFeature(adjacentFeature, true))
+            if (TryUseFeature(adjacentFeature))
             {
                 return;
             }
@@ -117,7 +114,7 @@ public class PlayerInteractionController : MonoBehaviour
         GameMessageLog.Write("There is nothing here to interact with.");
     }
 
-    private bool TryUseFeature(MapFeatureEntity feature, bool consumeTurnForNormalFeature)
+    private bool TryUseFeature(MapFeatureEntity feature)
     {
         if (feature == null)
         {
@@ -136,10 +133,16 @@ public class PlayerInteractionController : MonoBehaviour
 
         if (doorFeature != null)
         {
-            doorFeature.Toggle();
+            bool changed = doorFeature.Toggle(actorGridEntity);
+
+            if (!changed)
+            {
+                return true;
+            }
+
             RefreshFieldOfView();
 
-            if (consumeTurnForNormalFeature && turnManager != null)
+            if (turnManager != null)
             {
                 turnManager.PlayerTookAction();
             }

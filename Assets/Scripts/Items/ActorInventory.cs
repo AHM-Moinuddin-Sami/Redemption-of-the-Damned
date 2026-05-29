@@ -201,7 +201,7 @@ public class ActorInventory : MonoBehaviour
 
         if (printMessage)
         {
-            GameMessageLog.Write(gameObject.name + " picks up " + itemInstance.GetDisplayName() + ".");
+            GameMessageLog.Write(gameObject.name + " picks up " + ItemTextFormatter.FormatItemName(itemInstance) + ".");
             PrintInventoryDebug();
         }
     }
@@ -251,7 +251,7 @@ public class ActorInventory : MonoBehaviour
 
         if (printMessage)
         {
-            GameMessageLog.Write(gameObject.name + " picks up " + itemInstance.GetDisplayName() + ".");
+            GameMessageLog.Write(gameObject.name + " picks up " + ItemTextFormatter.FormatItemName(itemInstance) + ".");
             PrintInventoryDebug();
         }
     }
