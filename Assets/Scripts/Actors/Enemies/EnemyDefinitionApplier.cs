@@ -33,6 +33,7 @@ using UnityEngine;
 [RequireComponent(typeof(SimpleEnemyAI))]
 [RequireComponent(typeof(ExperienceReward))]
 [RequireComponent(typeof(SpriteRenderer))]
+[RequireComponent(typeof(EnemyDeathLoot))]
 public class EnemyDefinitionApplier : MonoBehaviour
 {
     private ActorGridEntity actorGridEntity;
@@ -41,6 +42,7 @@ public class EnemyDefinitionApplier : MonoBehaviour
     private SimpleEnemyAI simpleEnemyAI;
     private ExperienceReward experienceReward;
     private SpriteRenderer spriteRenderer;
+    private EnemyDeathLoot enemyDeathLoot;
 
     private void Awake()
     {
@@ -50,6 +52,7 @@ public class EnemyDefinitionApplier : MonoBehaviour
         simpleEnemyAI = GetComponent<SimpleEnemyAI>();
         experienceReward = GetComponent<ExperienceReward>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+        enemyDeathLoot = GetComponent<EnemyDeathLoot>();
     }
 
     public void ApplyDefinition(EnemyDefinition enemyDefinition)
@@ -75,6 +78,11 @@ public class EnemyDefinitionApplier : MonoBehaviour
         actorHealth.SetToFullHealth();
 
         experienceReward.SetExperienceAmount(enemyDefinition.ExperienceReward);
+
+        if (enemyDeathLoot != null)
+        {
+            enemyDeathLoot.ApplyDefinition(enemyDefinition);
+        }
 
         simpleEnemyAI.ApplyEnemyDefinition(enemyDefinition);
     }

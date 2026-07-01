@@ -27,6 +27,7 @@ public class TurnManager : MonoBehaviour
     private ActorGridEntity playerActor;
     private ActorSurvival playerSurvival;
     private PlayerFieldOfView playerFieldOfView;
+    private ActorItemUser playerItemUser;
     private bool isProcessingEnemyTurns;
 
     public bool CanPlayerAct
@@ -48,10 +49,13 @@ public class TurnManager : MonoBehaviour
         playerFieldOfView = null;
         isProcessingEnemyTurns = false;
 
+        playerItemUser = null;
+
         if (playerActor != null)
         {
             playerSurvival = playerActor.GetComponent<ActorSurvival>();
             playerFieldOfView = playerActor.GetComponent<PlayerFieldOfView>();
+            playerItemUser = playerActor.GetComponent<ActorItemUser>();
         }
 
         enemies.Clear();
@@ -90,6 +94,7 @@ public class TurnManager : MonoBehaviour
 
         ProcessEnemyTurns();
         RefreshPlayerFieldOfView();
+        ProcessEndOfPlayerActionEffects();
     }
 
     private void ProcessPlayerActionEffects()
@@ -100,6 +105,16 @@ public class TurnManager : MonoBehaviour
         }
 
         playerSurvival.OnActionTaken();
+    }
+
+    private void ProcessEndOfPlayerActionEffects()
+    {
+        if (playerItemUser == null)
+        {
+            return;
+        }
+
+        playerItemUser.OnPlayerActionCompleted();
     }
 
     private void ProcessEnemyTurns()

@@ -312,9 +312,15 @@ public class PlayerInventoryUI : MonoBehaviour
             return;
         }
 
-        if (selectedItem.Definition == null || !selectedItem.Definition.IsConsumable)
+        if (selectedItem.Definition == null || !selectedItem.Definition.CanBeUsedDirectly)
         {
             GameMessageLog.Write(selectedItem.GetDisplayName() + " cannot be used.");
+            return;
+        }
+        
+        if (selectedItem.IsEquipment)
+        {
+            GameMessageLog.Write("Equip " + selectedItem.GetDisplayName() + " to use its active effect.");
             return;
         }
 
@@ -441,6 +447,17 @@ public class PlayerInventoryUI : MonoBehaviour
             builder.Append(" [");
             builder.Append(item.Category);
             builder.AppendLine("]");
+
+            string useStateText = item.GetUseStateText();
+
+            if (!string.IsNullOrWhiteSpace(useStateText))
+            {
+                builder.Append(" (");
+                builder.Append(useStateText);
+                builder.Append(")");
+            }
+
+            builder.AppendLine();
         }
 
         return builder.ToString();

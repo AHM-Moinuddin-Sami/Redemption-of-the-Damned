@@ -15,13 +15,19 @@ using UnityEngine;
  * - store rarity
  * - store rolled affixes
  * - preserve unique item identity
+ * - store current cooldown for active items
+ * - store current charges for active items
  * - provide display/debug names
  * - provide all stat modifiers from base item + generated affixes
  * - support stack quantity changes
  *
- * Unique item rule:
- * If the ItemDefinition is marked unique, the ItemInstance becomes Unique and
- * clears all random rolled affixes.
+ * Cooldown rule:
+ * When an item is used, cooldown starts immediately.
+ * The first cooldown tick is skipped so the item does not lose one cooldown turn
+ * on the same turn it was activated.
+ *
+ * Charge rule:
+ * MaxCharges <= 0 means the item does not use charges.
  */
 
 public class ItemInstance
@@ -31,6 +37,11 @@ public class ItemInstance
     public ItemDefinition Definition { get; private set; }
     public int Quantity { get; private set; }
     public ItemRarity Rarity { get; private set; }
+
+    public int CurrentCooldownTurns { get; private set; }
+    public int CurrentCharges { get; private set; }
+
+    private bool cooldownStartedThisTurn;
 
     public IReadOnlyList<ItemAffixDefinition> RolledAffixes
     {
@@ -64,6 +75,22 @@ public class ItemInstance
         }
     }
 
+    public bool IsOnCooldown
+    {
+        get
+        {
+            return CurrentCooldownTurns > 0;
+        }
+    }
+
+    public bool UsesCharges
+    {
+        get
+        {
+            return Definition != null && Definition.UsesCharges;
+        }
+    }
+
     public ItemCategory Category
     {
         get
@@ -83,6 +110,7 @@ public class ItemInstance
         Quantity = Mathf.Max(1, quantity);
         Rarity = ItemRarity.Normal;
 
+        InitializeUseState();
         ApplyDefinitionRules();
     }
 
@@ -109,7 +137,118 @@ public class ItemInstance
             }
         }
 
+        InitializeUseState();
         ApplyDefinitionRules();
+    }
+
+    public bool CanUse(out string failureMessage)
+    {
+        failureMessage = "";
+
+        if (Definition == null)
+        {
+            failureMessage = "Unknown item cannot be used.";
+            return false;
+        }
+
+        if (!Definition.CanBeUsedDirectly)
+        {
+            failureMessage = GetDisplayName() + " cannot be used.";
+            return false;
+        }
+
+        if (IsOnCooldown)
+        {
+            failureMessage = GetDisplayName() + " is on cooldown for " + CurrentCooldownTurns + " more turns.";
+            return false;
+        }
+
+        if (UsesCharges && CurrentCharges <= 0)
+        {
+            failureMessage = GetDisplayName() + " has no charges left.";
+            return false;
+        }
+
+        return true;
+    }
+
+    public void SpendUse()
+    {
+        if (Definition == null)
+        {
+            return;
+        }
+
+        if (UsesCharges && CurrentCharges > 0)
+        {
+            CurrentCharges--;
+        }
+
+        StartCooldown(Definition.UseCooldownTurns);
+    }
+
+    public bool ShouldBeRemovedBecauseChargesEmpty()
+    {
+        if (Definition == null)
+        {
+            return false;
+        }
+
+        if (!Definition.UsesCharges)
+        {
+            return false;
+        }
+
+        if (!Definition.ConsumeWhenChargesEmpty)
+        {
+            return false;
+        }
+
+        return CurrentCharges <= 0;
+    }
+
+    public void TickUseCooldown()
+    {
+        if (CurrentCooldownTurns <= 0)
+        {
+            cooldownStartedThisTurn = false;
+            return;
+        }
+
+        if (cooldownStartedThisTurn)
+        {
+            cooldownStartedThisTurn = false;
+            return;
+        }
+
+        CurrentCooldownTurns--;
+    }
+
+    public string GetUseStateText()
+    {
+        if (Definition == null || !Definition.CanBeUsedDirectly)
+        {
+            return "";
+        }
+
+        string text = "";
+
+        if (UsesCharges)
+        {
+            text += "Charges: " + CurrentCharges + "/" + Definition.MaxCharges;
+        }
+
+        if (IsOnCooldown)
+        {
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                text += " | ";
+            }
+
+            text += "Cooldown: " + CurrentCooldownTurns;
+        }
+
+        return text;
     }
 
     public string GetDisplayName()
@@ -161,6 +300,13 @@ public class ItemInstance
                     text += ",";
                 }
             }
+        }
+
+        string useState = GetUseStateText();
+
+        if (!string.IsNullOrWhiteSpace(useState))
+        {
+            text += " " + useState;
         }
 
         return text;
@@ -257,6 +403,34 @@ public class ItemInstance
         }
 
         return allModifiers;
+    }
+
+    private void InitializeUseState()
+    {
+        CurrentCooldownTurns = 0;
+        cooldownStartedThisTurn = false;
+
+        if (Definition != null && Definition.UsesCharges)
+        {
+            CurrentCharges = Definition.MaxCharges;
+        }
+        else
+        {
+            CurrentCharges = 0;
+        }
+    }
+
+    private void StartCooldown(int cooldownTurns)
+    {
+        int safeCooldown = Mathf.Max(0, cooldownTurns);
+
+        if (safeCooldown <= 0)
+        {
+            return;
+        }
+
+        CurrentCooldownTurns = safeCooldown;
+        cooldownStartedThisTurn = true;
     }
 
     private void ApplyDefinitionRules()

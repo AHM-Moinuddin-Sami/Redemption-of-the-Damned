@@ -61,6 +61,7 @@ public static class ItemDescriptionBuilder
         AppendStatModifiers(builder, "Base Modifiers:", itemDefinition.StatModifiers);
         AppendAffixes(builder, itemInstance.RolledAffixes);
         AppendUniqueFlavorText(builder, itemDefinition);
+        AppendSpecialEffects(builder, itemDefinition.SpecialEffects);
         AppendConsumableEffects(builder, itemDefinition.ConsumableEffects);
 
         return builder.ToString().TrimEnd();
@@ -111,6 +112,76 @@ public static class ItemDescriptionBuilder
         }
 
         builder.AppendLine(ItemTextFormatter.FormatUniqueFlavorText(itemDefinition.UniqueFlavorText));
+    }
+
+    private static void AppendSpecialEffects(
+    StringBuilder builder,
+    IReadOnlyList<ItemSpecialEffectDefinition> specialEffects)
+    {
+        if (specialEffects == null || specialEffects.Count == 0)
+        {
+            return;
+        }
+
+        builder.AppendLine("Special Effects:");
+
+        for (int i = 0; i < specialEffects.Count; i++)
+        {
+            if (specialEffects[i] == null)
+            {
+                continue;
+            }
+
+            builder.AppendLine("- " + ItemTextFormatter.FormatSpecialEffectDescription(specialEffects[i].GetDescription()));
+        }
+    }
+
+    private static void AppendUseInfo(StringBuilder builder, ItemInstance itemInstance)
+    {
+        if (itemInstance == null || itemInstance.Definition == null)
+        {
+            return;
+        }
+
+        ItemDefinition itemDefinition = itemInstance.Definition;
+
+        if (!itemDefinition.CanBeUsedDirectly)
+        {
+            return;
+        }
+
+        builder.AppendLine("Use:");
+
+        if (itemDefinition.ConsumeOnUse)
+        {
+            builder.AppendLine("- Consumed on use");
+        }
+        else
+        {
+            builder.AppendLine("- Reusable");
+        }
+
+        if (itemDefinition.UseCooldownTurns > 0)
+        {
+            builder.AppendLine("- Cooldown: " + itemDefinition.UseCooldownTurns + " turns");
+        }
+
+        if (itemDefinition.UsesCharges)
+        {
+            builder.AppendLine("- Charges: " + itemInstance.CurrentCharges + "/" + itemDefinition.MaxCharges);
+
+            if (itemDefinition.ConsumeWhenChargesEmpty)
+            {
+                builder.AppendLine("- Destroyed when charges are empty");
+            }
+        }
+
+        string currentState = itemInstance.GetUseStateText();
+
+        if (!string.IsNullOrWhiteSpace(currentState))
+        {
+            builder.AppendLine("- Current: " + currentState);
+        }
     }
 
     private static void AppendStatModifiers(

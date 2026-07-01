@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /*
@@ -64,6 +65,21 @@ public class EnemyDefinition : ScriptableObject
     [SerializeField] private int wanderChancePercent = 45;
     [SerializeField] private int maxWanderDistanceFromHome = 6;
     [SerializeField] private int wanderDirectionAttempts = 4;
+
+    [Header("Death Loot")]
+    [SerializeField] private bool canDropLoot = true;
+
+    [Range(0, 100)]
+    [SerializeField] private int deathDropChancePercent = 35;
+
+    [SerializeField] private int minDeathDrops = 0;
+    [SerializeField] private int maxDeathDrops = 1;
+
+    [SerializeField] private ItemDropTable deathLootTable;
+    [SerializeField] private bool useFloorLootProfileIfNoDeathTable = false;
+
+    [Header("Guaranteed Death Drops")]
+    [SerializeField] private List<EnemyGuaranteedDropEntry> guaranteedDeathDrops = new List<EnemyGuaranteedDropEntry>();
 
     public string DisplayName
     {
@@ -182,6 +198,61 @@ public class EnemyDefinition : ScriptableObject
         get
         {
             return Mathf.Max(1, wanderDirectionAttempts);
+        }
+    }
+
+    public bool CanDropLoot
+    {
+        get
+        {
+            return canDropLoot;
+        }
+    }
+
+    public int DeathDropChancePercent
+    {
+        get
+        {
+            return Mathf.Clamp(deathDropChancePercent, 0, 100);
+        }
+    }
+
+    public int MinDeathDrops
+    {
+        get
+        {
+            return Mathf.Max(0, minDeathDrops);
+        }
+    }
+
+    public int MaxDeathDrops
+    {
+        get
+        {
+            return Mathf.Max(MinDeathDrops, maxDeathDrops);
+        }
+    }
+
+    public ItemDropTable DeathLootTable
+    {
+        get
+        {
+            return deathLootTable;
+        }
+    }
+
+    public bool UseFloorLootProfileIfNoDeathTable
+    {
+        get
+        {
+            return useFloorLootProfileIfNoDeathTable;
+        }
+    }
+    public IReadOnlyList<EnemyGuaranteedDropEntry> GuaranteedDeathDrops
+    {
+        get
+        {
+            return guaranteedDeathDrops;
         }
     }
 }

@@ -7,16 +7,19 @@ using UnityEngine;
  * --------------
  * Stores the equipment currently worn or held by an actor.
  *
- * This script handles equipment placement logic and tells ActorStats to
- * recalculate whenever equipment changes.
+ * This version fixes the broken dictionary-based RemoveEquippedItem() method.
+ * Your equipment system uses direct slot fields, not a Dictionary, so all slot
+ * access is handled through GetEquippedItem() and SetEquippedItem().
  *
  * Current responsibilities:
  * - equip items into valid equipment slots
  * - remove equipped items from inventory
  * - return replaced equipment back to inventory
  * - handle two-handed weapon rules
+ * - support accessory/trinket equipment
  * - provide equipped items to ActorStats
  * - expose equipped items to equipment UI
+ * - remove consumed/crumbled equipped active items
  * - notify UI when equipment changes
  *
  * Current equipment rules:
@@ -27,8 +30,10 @@ using UnityEngine;
  * - Armor/accessory slots replace only their matching slot.
  *
  * Important:
- * This script does not calculate stats directly.
- * ActorStats recalculates by reading equipped items from this script.
+ * RemoveEquippedItem() does NOT return the item to inventory.
+ * It is used when an equipped item is consumed, destroyed, or crumbles.
+ *
+ * If you later want manual unequip, use TryUnequipToInventory().
  */
 
 public class ActorEquipment : MonoBehaviour
@@ -43,6 +48,7 @@ public class ActorEquipment : MonoBehaviour
     private ItemInstance feet;
     private ItemInstance neck;
     private ItemInstance ring;
+    private ItemInstance trinket;
 
     private ActorStats actorStats;
 
@@ -100,6 +106,54 @@ public class ActorEquipment : MonoBehaviour
         return true;
     }
 
+    public bool TryUnequipToInventory(EquipmentSlotType slot, ActorInventory inventory)
+    {
+        if (inventory == null)
+        {
+            return false;
+        }
+
+        ItemInstance equippedItem = GetEquippedItem(slot);
+
+        if (equippedItem == null)
+        {
+            GameMessageLog.Write("Nothing is equipped in " + slot + ".");
+            return false;
+        }
+
+        SetEquippedItem(slot, null);
+        inventory.AddItem(equippedItem, false);
+
+        GameMessageLog.Write(gameObject.name + " unequips " + equippedItem.GetDisplayName() + ".");
+
+        RecalculateStats();
+        NotifyEquipmentChanged();
+
+        return true;
+    }
+
+    public bool RemoveEquippedItem(ItemInstance itemInstance)
+    {
+        if (itemInstance == null)
+        {
+            return false;
+        }
+
+        EquipmentSlotType slot = FindSlotContainingItem(itemInstance);
+
+        if (slot == EquipmentSlotType.None)
+        {
+            return false;
+        }
+
+        SetEquippedItem(slot, null);
+
+        RecalculateStats();
+        NotifyEquipmentChanged();
+
+        return true;
+    }
+
     public ItemInstance GetEquippedItem(EquipmentSlotType slot)
     {
         if (slot == EquipmentSlotType.MainHand)
@@ -142,6 +196,11 @@ public class ActorEquipment : MonoBehaviour
             return ring;
         }
 
+        if (slot == EquipmentSlotType.Trinket)
+        {
+            return trinket;
+        }
+
         return null;
     }
 
@@ -157,6 +216,7 @@ public class ActorEquipment : MonoBehaviour
         AddIfNotNull(equippedItems, feet);
         AddIfNotNull(equippedItems, neck);
         AddIfNotNull(equippedItems, ring);
+        AddIfNotNull(equippedItems, trinket);
 
         return equippedItems;
     }
@@ -213,6 +273,56 @@ public class ActorEquipment : MonoBehaviour
         SetEquippedItem(slot, itemInstance);
     }
 
+    private EquipmentSlotType FindSlotContainingItem(ItemInstance itemInstance)
+    {
+        if (mainHand == itemInstance)
+        {
+            return EquipmentSlotType.MainHand;
+        }
+
+        if (offHand == itemInstance)
+        {
+            return EquipmentSlotType.OffHand;
+        }
+
+        if (head == itemInstance)
+        {
+            return EquipmentSlotType.Head;
+        }
+
+        if (body == itemInstance)
+        {
+            return EquipmentSlotType.Body;
+        }
+
+        if (hands == itemInstance)
+        {
+            return EquipmentSlotType.Hands;
+        }
+
+        if (feet == itemInstance)
+        {
+            return EquipmentSlotType.Feet;
+        }
+
+        if (neck == itemInstance)
+        {
+            return EquipmentSlotType.Neck;
+        }
+
+        if (ring == itemInstance)
+        {
+            return EquipmentSlotType.Ring;
+        }
+
+        if (trinket == itemInstance)
+        {
+            return EquipmentSlotType.Trinket;
+        }
+
+        return EquipmentSlotType.None;
+    }
+
     private void ReturnEquippedItemToInventory(ItemInstance itemInstance, ActorInventory inventory)
     {
         if (itemInstance == null || inventory == null)
@@ -220,7 +330,7 @@ public class ActorEquipment : MonoBehaviour
             return;
         }
 
-        // This is silent because the item is being unequipped, not picked up.
+        // Silent because this is equipment replacement, not a floor pickup.
         inventory.AddItem(itemInstance, false);
     }
 
@@ -271,6 +381,12 @@ public class ActorEquipment : MonoBehaviour
         if (slot == EquipmentSlotType.Ring)
         {
             ring = itemInstance;
+            return;
+        }
+
+        if (slot == EquipmentSlotType.Trinket)
+        {
+            trinket = itemInstance;
         }
     }
 
@@ -316,6 +432,7 @@ public class ActorEquipment : MonoBehaviour
         equipmentText += "\n- Feet: " + GetSlotDebugName(feet);
         equipmentText += "\n- Neck: " + GetSlotDebugName(neck);
         equipmentText += "\n- Ring: " + GetSlotDebugName(ring);
+        equipmentText += "\n- Trinket: " + GetSlotDebugName(trinket);
 
         Debug.Log(equipmentText);
     }

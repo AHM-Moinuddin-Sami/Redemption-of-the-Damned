@@ -60,6 +60,15 @@ public class ItemDefinition : ScriptableObject
     [Header("Classification")]
     [SerializeField] private ItemCategory category = ItemCategory.Junk;
 
+    [Header("Use Settings")]
+    [SerializeField] private bool canBeUsedDirectly = false;
+    [SerializeField] private bool consumeOnUse = true;
+
+    [Header("Cooldowns And Charges")]
+    [SerializeField] private int useCooldownTurns = 0;
+    [SerializeField] private int maxCharges = 0;
+    [SerializeField] private bool consumeWhenChargesEmpty = false;
+
     [Header("Stacking")]
     [SerializeField] private bool stackable = false;
     [SerializeField] private int maxStackSize = 1;
@@ -71,8 +80,12 @@ public class ItemDefinition : ScriptableObject
     [Header("Stat Modifiers")]
     [SerializeField] private List<StatModifier> statModifiers = new List<StatModifier>();
 
+    [Header("Special Effects")]
+    [SerializeField] private List<ItemSpecialEffectDefinition> specialEffects = new List<ItemSpecialEffectDefinition>();
+
     [Header("Consumable Effects")]
     [SerializeField] private List<ConsumableEffect> consumableEffects = new List<ConsumableEffect>();
+
 
     public string DisplayName
     {
@@ -175,6 +188,14 @@ public class ItemDefinition : ScriptableObject
         }
     }
 
+    public IReadOnlyList<ItemSpecialEffectDefinition> SpecialEffects
+    {
+        get
+        {
+            return specialEffects;
+        }
+    }
+
     public IReadOnlyList<ConsumableEffect> ConsumableEffects
     {
         get
@@ -189,7 +210,8 @@ public class ItemDefinition : ScriptableObject
         {
             return category == ItemCategory.Weapon ||
                    category == ItemCategory.Armor ||
-                   category == ItemCategory.Shield;
+                   category == ItemCategory.Shield ||
+                   category == ItemCategory.Accessory;
         }
     }
 
@@ -200,6 +222,79 @@ public class ItemDefinition : ScriptableObject
             return category == ItemCategory.Consumable ||
                    category == ItemCategory.Food;
         }
+    }
+
+    public bool CanBeUsedDirectly
+    {
+        get
+        {
+            return IsConsumable ||
+                   canBeUsedDirectly ||
+                   HasSpecialEffectTrigger(ItemSpecialEffectTrigger.OnUse);
+        }
+    }
+
+    public bool ConsumeOnUse
+    {
+        get
+        {
+            return consumeOnUse;
+        }
+    }
+
+    public int UseCooldownTurns
+    {
+        get
+        {
+            return Mathf.Max(0, useCooldownTurns);
+        }
+    }
+
+    public int MaxCharges
+    {
+        get
+        {
+            return Mathf.Max(0, maxCharges);
+        }
+    }
+
+    public bool UsesCharges
+    {
+        get
+        {
+            return MaxCharges > 0;
+        }
+    }
+
+    public bool ConsumeWhenChargesEmpty
+    {
+        get
+        {
+            return consumeWhenChargesEmpty;
+        }
+    }
+
+    public bool HasSpecialEffectTrigger(ItemSpecialEffectTrigger trigger)
+    {
+        if (specialEffects == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < specialEffects.Count; i++)
+        {
+            if (specialEffects[i] == null)
+            {
+                continue;
+            }
+
+            if (specialEffects[i].Trigger == trigger)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void OnValidate()
@@ -238,9 +333,32 @@ public class ItemDefinition : ScriptableObject
             twoHanded = false;
         }
 
+        if (category == ItemCategory.Accessory && equipmentSlot == EquipmentSlotType.None)
+        {
+            equipmentSlot = EquipmentSlotType.Trinket;
+        }
+
         if (!IsConsumable && consumableEffects.Count > 0)
         {
             consumableEffects.Clear();
+        }
+
+        if (!CanBeUsedDirectly)
+        {
+            consumeOnUse = false;
+            useCooldownTurns = 0;
+            maxCharges = 0;
+            consumeWhenChargesEmpty = false;
+        }
+
+        if (consumeOnUse)
+        {
+            consumeWhenChargesEmpty = false;
+        }
+
+        if (maxCharges <= 0)
+        {
+            consumeWhenChargesEmpty = false;
         }
     }
 }

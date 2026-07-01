@@ -666,6 +666,7 @@ GameObject:
   - component: {fileID: 1871629616075757146}
   - component: {fileID: 1601594448977374093}
   - component: {fileID: 1919008795752897726}
+  - component: {fileID: 5932675933789725110}
   m_Layer: 3
   m_Name: Player Prefab
   m_TagString: Untagged
@@ -843,15 +844,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ActorSurvival
   maxHunger: 100
+  startingHunger: 100
+  hungerLossPerAction: 0.5
   maxThirst: 100
-  hungerDecreaseInterval: 2
-  thirstDecreaseInterval: 2
-  hungerDecreaseAmount: 1
-  thirstDecreaseAmount: 1
-  lowHungerThreshold: 30
-  criticalHungerThreshold: 10
-  lowThirstThreshold: 30
-  criticalThirstThreshold: 10
+  startingThirst: 100
+  thirstLossPerAction: 0.5
   starvationDamage: 1
   dehydrationDamage: 2
 --- !u!114 &858098536023112584
@@ -986,6 +983,18 @@ MonoBehaviour:
   armorBonusEveryLevels: 3
   armorBonusAmount: 1
   restoreToFullHealthOnLevelUp: 1
+--- !u!114 &5932675933789725110
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6014314104148356597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c07c01ef4ff158f42b390ab1b4039511, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ActorItemSpecialEffectHandler
 --- !u!1 &6419676151027369568
 GameObject:
   m_ObjectHideFlags: 0

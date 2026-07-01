@@ -3,315 +3,166 @@ using UnityEngine;
 /*
  * ActorSurvival
  * -------------
- * Handles basic hunger and thirst for an actor.
+ * Stores and updates hunger and thirst values for an actor.
  *
- * This version keeps routine hunger/thirst values in the Console only, while
- * important player-facing warnings go to GameMessageLog.
+ * This script is currently mainly used by the player.
  *
  * Current responsibilities:
- * - reduce hunger/thirst over valid player actions
- * - warn when hunger/thirst becomes low or critical
+ * - store current hunger
+ * - store current thirst
+ * - reduce hunger/thirst when an action is taken
  * - damage the actor when starving or dehydrated
- * - restore hunger and thirst from consumables
+ * - restore hunger/thirst from consumables or item special effects
  *
  * Important:
- * This still has no survival UI. The message log only shows important events.
+ * TurnManager calls OnActionTaken() after each valid player action.
+ *
+ * Later this can expand into:
+ * - sanity
+ * - disease
+ * - fatigue
+ * - sleep
+ * - temperature
+ * - different hunger/thirst drain rates by biome
  */
 
 [RequireComponent(typeof(ActorHealth))]
 public class ActorSurvival : MonoBehaviour
 {
-    [Header("Maximum Values")]
-    [SerializeField] private int maxHunger = 100;
-    [SerializeField] private int maxThirst = 100;
+    [Header("Hunger")]
+    [SerializeField] private float maxHunger = 100;
+    [SerializeField] private float startingHunger = 100;
+    [SerializeField] private float hungerLossPerAction = 1;
 
-    [Header("Drain Timing")]
-    [SerializeField] private int hungerDecreaseInterval = 8;
-    [SerializeField] private int thirstDecreaseInterval = 5;
-
-    [Header("Drain Amount")]
-    [SerializeField] private int hungerDecreaseAmount = 1;
-    [SerializeField] private int thirstDecreaseAmount = 1;
-
-    [Header("Warnings")]
-    [SerializeField] private int lowHungerThreshold = 30;
-    [SerializeField] private int criticalHungerThreshold = 10;
-    [SerializeField] private int lowThirstThreshold = 30;
-    [SerializeField] private int criticalThirstThreshold = 10;
+    [Header("Thirst")]
+    [SerializeField] private float maxThirst = 100;
+    [SerializeField] private float startingThirst = 100;
+    [SerializeField] private float thirstLossPerAction = 1;
 
     [Header("Damage")]
     [SerializeField] private int starvationDamage = 1;
-    [SerializeField] private int dehydrationDamage = 2;
+    [SerializeField] private int dehydrationDamage = 1;
 
-    public int CurrentHunger { get; private set; }
-    public int CurrentThirst { get; private set; }
-    
-    public int MaxHunger
+    public float CurrentHunger { get; private set; }
+    public float CurrentThirst { get; private set; }
+
+    public float MaxHunger
     {
         get
         {
-            return maxHunger;
+            return Mathf.Max(1.0f, maxHunger);
         }
     }
 
-    public int MaxThirst
+    public float MaxThirst
     {
         get
         {
-            return maxThirst;
+            return Mathf.Max(1, maxThirst);
         }
     }
-    private int hungerActionCounter;
-    private int thirstActionCounter;
-
-    private bool lowHungerMessageShown;
-    private bool criticalHungerMessageShown;
-    private bool lowThirstMessageShown;
-    private bool criticalThirstMessageShown;
 
     private ActorHealth actorHealth;
-    private ActorGridEntity actorGridEntity;
 
     private void Awake()
     {
         actorHealth = GetComponent<ActorHealth>();
-        actorGridEntity = GetComponent<ActorGridEntity>();
 
-        CurrentHunger = maxHunger;
-        CurrentThirst = maxThirst;
+        CurrentHunger = Mathf.Clamp(startingHunger, 0, MaxHunger);
+        CurrentThirst = Mathf.Clamp(startingThirst, 0, MaxThirst);
     }
 
     public void OnActionTaken()
     {
-        ProcessHungerDrain();
-        ProcessThirstDrain();
+        ReduceHunger(hungerLossPerAction);
+        ReduceThirst(thirstLossPerAction);
 
-        PrintSurvivalDebug();
+        ApplySurvivalDamageIfNeeded();
     }
 
-    public bool RestoreHunger(int amount)
+    public bool RestoreHunger(float amount)
     {
-        int safeAmount = Mathf.Max(0, amount);
+        float safeAmount = Mathf.Max(0, amount);
 
         if (safeAmount == 0)
         {
             return false;
         }
 
-        if (CurrentHunger >= maxHunger)
+        if (CurrentHunger >= MaxHunger)
         {
-            GameMessageLog.Write(GetDisplayName() + " is already full.");
+            GameMessageLog.Write("You are already full.");
             return false;
         }
 
-        int oldValue = CurrentHunger;
+        float oldValue = CurrentHunger;
+        CurrentHunger = Mathf.Min(MaxHunger, CurrentHunger + safeAmount);
 
-        CurrentHunger += safeAmount;
+        float restored = CurrentHunger - oldValue;
+        GameMessageLog.Write("You restore " + restored + " hunger.");
 
-        if (CurrentHunger > maxHunger)
-        {
-            CurrentHunger = maxHunger;
-        }
-
-        ResetHungerWarningsIfNeeded();
-
-        int restoredAmount = CurrentHunger - oldValue;
-
-        GameMessageLog.Write(GetDisplayName() + " restores " + restoredAmount + " hunger.");
-
-        PrintSurvivalDebug();
-
-        return restoredAmount > 0;
+        return restored > 0;
     }
 
-    public bool RestoreThirst(int amount)
+    public bool RestoreThirst(float amount)
     {
-        int safeAmount = Mathf.Max(0, amount);
+        float safeAmount = Mathf.Max(0, amount);
 
         if (safeAmount == 0)
         {
             return false;
         }
 
-        if (CurrentThirst >= maxThirst)
+        if (CurrentThirst >= MaxThirst)
         {
-            GameMessageLog.Write(GetDisplayName() + " is not thirsty.");
+            GameMessageLog.Write("You are not thirsty.");
             return false;
         }
 
-        int oldValue = CurrentThirst;
+        float oldValue = CurrentThirst;
+        CurrentThirst = Mathf.Min(MaxThirst, CurrentThirst + safeAmount);
 
-        CurrentThirst += safeAmount;
+        float restored = CurrentThirst - oldValue;
+        GameMessageLog.Write("You restore " + restored + " thirst.");
 
-        if (CurrentThirst > maxThirst)
-        {
-            CurrentThirst = maxThirst;
-        }
-
-        ResetThirstWarningsIfNeeded();
-
-        int restoredAmount = CurrentThirst - oldValue;
-
-        GameMessageLog.Write(GetDisplayName() + " restores " + restoredAmount + " thirst.");
-
-        PrintSurvivalDebug();
-
-        return restoredAmount > 0;
+        return restored > 0;
     }
 
-    private void ProcessHungerDrain()
+    public void SetToFullSurvival()
     {
-        hungerActionCounter++;
+        CurrentHunger = MaxHunger;
+        CurrentThirst = MaxThirst;
+    }
 
-        if (hungerActionCounter < hungerDecreaseInterval)
+    private void ReduceHunger(float amount)
+    {
+        float safeAmount = Mathf.Max(0, amount);
+        CurrentHunger = Mathf.Max(0, CurrentHunger - safeAmount);
+    }
+
+    private void ReduceThirst(float amount)
+    {
+        float safeAmount = Mathf.Max(0, amount);
+        CurrentThirst = Mathf.Max(0, CurrentThirst - safeAmount);
+    }
+
+    private void ApplySurvivalDamageIfNeeded()
+    {
+        if (actorHealth == null || actorHealth.IsDead)
         {
             return;
         }
 
-        hungerActionCounter = 0;
-
-        if (CurrentHunger > 0)
+        if (CurrentHunger <= 0 && starvationDamage > 0)
         {
-            CurrentHunger -= hungerDecreaseAmount;
-
-            if (CurrentHunger < 0)
-            {
-                CurrentHunger = 0;
-            }
-
-            CheckHungerWarnings();
-            return;
+            GameMessageLog.Write("You are starving.");
+            actorHealth.TakeDamage(starvationDamage);
         }
 
-        ApplyStarvationDamage();
-    }
-
-    private void ProcessThirstDrain()
-    {
-        thirstActionCounter++;
-
-        if (thirstActionCounter < thirstDecreaseInterval)
+        if (CurrentThirst <= 0 && dehydrationDamage > 0)
         {
-            return;
+            GameMessageLog.Write("You are dehydrated.");
+            actorHealth.TakeDamage(dehydrationDamage);
         }
-
-        thirstActionCounter = 0;
-
-        if (CurrentThirst > 0)
-        {
-            CurrentThirst -= thirstDecreaseAmount;
-
-            if (CurrentThirst < 0)
-            {
-                CurrentThirst = 0;
-            }
-
-            CheckThirstWarnings();
-            return;
-        }
-
-        ApplyDehydrationDamage();
-    }
-
-    private void CheckHungerWarnings()
-    {
-        if (CurrentHunger <= criticalHungerThreshold && !criticalHungerMessageShown)
-        {
-            GameMessageLog.Write(GetDisplayName() + " is starving.");
-            criticalHungerMessageShown = true;
-            lowHungerMessageShown = true;
-            return;
-        }
-
-        if (CurrentHunger <= lowHungerThreshold && !lowHungerMessageShown)
-        {
-            GameMessageLog.Write(GetDisplayName() + " is getting hungry.");
-            lowHungerMessageShown = true;
-        }
-    }
-
-    private void CheckThirstWarnings()
-    {
-        if (CurrentThirst <= criticalThirstThreshold && !criticalThirstMessageShown)
-        {
-            GameMessageLog.Write(GetDisplayName() + " is severely thirsty.");
-            criticalThirstMessageShown = true;
-            lowThirstMessageShown = true;
-            return;
-        }
-
-        if (CurrentThirst <= lowThirstThreshold && !lowThirstMessageShown)
-        {
-            GameMessageLog.Write(GetDisplayName() + " is getting thirsty.");
-            lowThirstMessageShown = true;
-        }
-    }
-
-    private void ResetHungerWarningsIfNeeded()
-    {
-        if (CurrentHunger > lowHungerThreshold)
-        {
-            lowHungerMessageShown = false;
-            criticalHungerMessageShown = false;
-        }
-        else if (CurrentHunger > criticalHungerThreshold)
-        {
-            criticalHungerMessageShown = false;
-        }
-    }
-
-    private void ResetThirstWarningsIfNeeded()
-    {
-        if (CurrentThirst > lowThirstThreshold)
-        {
-            lowThirstMessageShown = false;
-            criticalThirstMessageShown = false;
-        }
-        else if (CurrentThirst > criticalThirstThreshold)
-        {
-            criticalThirstMessageShown = false;
-        }
-    }
-
-    private void ApplyStarvationDamage()
-    {
-        if (actorHealth == null)
-        {
-            return;
-        }
-
-        GameMessageLog.Write(GetDisplayName() + " suffers from starvation.");
-        actorHealth.TakeDamage(starvationDamage);
-    }
-
-    private void ApplyDehydrationDamage()
-    {
-        if (actorHealth == null)
-        {
-            return;
-        }
-
-        GameMessageLog.Write(GetDisplayName() + " suffers from dehydration.");
-        actorHealth.TakeDamage(dehydrationDamage);
-    }
-
-    public void PrintSurvivalDebug()
-    {
-        Debug.Log(
-            gameObject.name +
-            " survival:" +
-            "\n- Hunger: " + CurrentHunger + "/" + maxHunger +
-            "\n- Thirst: " + CurrentThirst + "/" + maxThirst
-        );
-    }
-
-    private string GetDisplayName()
-    {
-        if (actorGridEntity == null)
-        {
-            return gameObject.name;
-        }
-
-        return actorGridEntity.DisplayName;
     }
 }

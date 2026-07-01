@@ -24,6 +24,7 @@ public static class ItemTextFormatter
     private const string MagicColor = "#4DA6FF";
     private const string RareColor = "#FFD24A";
     private const string UniqueColor = "#FF9F43";
+    private const string SpecialEffectColor = "#FFB86C";
 
     private const string AffixColor = "#D6B4FF";
     private const string PositiveStatColor = "#7CFF7C";
@@ -88,6 +89,16 @@ public static class ItemTextFormatter
         }
 
         return WrapColor("<i>" + text + "</i>", FlavorColor);
+    }
+
+    public static string FormatSpecialEffectDescription(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "";
+        }
+
+        return WrapColor(text, SpecialEffectColor);
     }
 
     private static string GetRarityColor(ItemRarity rarity)

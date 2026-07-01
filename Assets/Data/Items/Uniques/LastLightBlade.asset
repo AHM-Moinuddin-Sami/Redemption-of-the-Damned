@@ -12,16 +12,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3bbf65faebe4f74698b94a64096d7eb, type: 3}
   m_Name: LastLightBlade
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
-  displayName: New Item
-  description: 
-  iconSprite: {fileID: 0}
-  uniqueItem: 0
-  uniqueId: 
-  uniqueFlavorText: 
-  category: 0
+  displayName: Last Light
+  description: COCKA
+  iconSprite: {fileID: 752958383, guid: e95949754615c9e47a8dcee9097b2b4b, type: 3}
+  uniqueItem: 1
+  uniqueId: unique_last_light_blade
+  uniqueFlavorText: ABOBA
+  category: 4
   stackable: 0
   maxStackSize: 1
-  equipmentSlot: 0
-  twoHanded: 0
-  statModifiers: []
+  equipmentSlot: 1
+  twoHanded: 1
+  statModifiers:
+  - statType: 0
+    value: 3
+  - statType: 1
+    value: 3
+  specialEffects:
+  - trigger: 0
+    effectType: 0
+    value: 2
+    chancePercent: 100
+    customDescription: On hit deal +2 bonus damage
+    activationMessage: Last Light flares.
+  - trigger: 1
+    effectType: 1
+    value: 3
+    chancePercent: 100
+    customDescription: On kill heal 3 HP.
+    activationMessage: Steal life
   consumableEffects: []

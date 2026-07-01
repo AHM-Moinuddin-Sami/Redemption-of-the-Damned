@@ -1,32 +1,40 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 /*
  * ActorItemUser
  * -------------
- * Handles using consumable items for an actor.
+ * Handles item use from inventory and from equipped active items.
  *
- * Player-facing item use messages now go to GameMessageLog.
+ * Current behavior:
+ * - inventory use works for food, potions, and non-equipment active items
+ * - equipment active use works for equipped rings/amulets/trinkets
+ * - equipped active items can use cooldowns and charges
+ * - cooldowns tick for both inventory items and equipped items
  *
- * Current responsibilities:
- * - check whether an item can be used
- * - apply consumable effects
- * - support healing, hunger restoration, and thirst restoration
- * - remove 1 quantity after successful use
+ * Important:
+ * Equipment with OnUse effects should normally be equipped first.
+ * This prevents active charms from being spammed directly from the backpack.
  */
 
 [RequireComponent(typeof(ActorInventory))]
+[RequireComponent(typeof(ActorEquipment))]
 public class ActorItemUser : MonoBehaviour
 {
     private ActorInventory actorInventory;
+    private ActorEquipment actorEquipment;
     private ActorHealth actorHealth;
     private ActorSurvival actorSurvival;
+    private ActorItemSpecialEffectHandler specialEffectHandler;
 
     private void Awake()
     {
         actorInventory = GetComponent<ActorInventory>();
+        actorEquipment = GetComponent<ActorEquipment>();
         actorHealth = GetComponent<ActorHealth>();
         actorSurvival = GetComponent<ActorSurvival>();
+        specialEffectHandler = GetComponent<ActorItemSpecialEffectHandler>();
     }
 
     public bool TryUseItem(ItemInstance itemInstance)
@@ -36,49 +44,202 @@ public class ActorItemUser : MonoBehaviour
             return false;
         }
 
-        if (!itemInstance.Definition.IsConsumable)
+        if (itemInstance.IsEquipment && itemInstance.Definition.CanBeUsedDirectly)
         {
-            GameMessageLog.Write(itemInstance.GetDisplayName() + " cannot be used.");
+            GameMessageLog.Write("Equip " + itemInstance.GetDisplayName() + " to use its active effect.");
             return false;
         }
 
-        IReadOnlyList<ConsumableEffect> effects = itemInstance.Definition.ConsumableEffects;
-
-        if (effects.Count == 0)
-        {
-            GameMessageLog.Write(itemInstance.GetDisplayName() + " has no effect.");
-            return false;
-        }
-
-        bool appliedAnyEffect = ApplyEffects(effects);
-
-        if (!appliedAnyEffect)
-        {
-            return false;
-        }
-
-        actorInventory.RemoveQuantity(itemInstance, 1);
-
-        GameMessageLog.Write(gameObject.name + " uses " + itemInstance.GetDisplayName() + ".");
-        actorInventory.PrintInventoryDebug();
-
-        return true;
+        return TryUseItemInternal(itemInstance, false);
     }
 
-    private bool ApplyEffects(IReadOnlyList<ConsumableEffect> effects)
+    public bool TryUseEquippedItem(EquipmentSlotType slot)
     {
-        bool appliedAnyEffect = false;
-
-        for (int i = 0; i < effects.Count; i++)
+        if (actorEquipment == null)
         {
-            if (effects[i] == null)
+            return false;
+        }
+
+        ItemInstance equippedItem = actorEquipment.GetEquippedItem(slot);
+
+        if (equippedItem == null)
+        {
+            GameMessageLog.Write("There is no item equipped in " + slot + ".");
+            return false;
+        }
+
+        return TryUseItemInternal(equippedItem, true);
+    }
+
+    public bool TryUseFirstReadyEquippedActiveItem()
+    {
+        if (actorEquipment == null)
+        {
+            return false;
+        }
+
+        IReadOnlyList<ItemInstance> equippedItems = actorEquipment.GetEquippedItems();
+
+        bool foundActiveItem = false;
+        string firstFailureMessage = "";
+
+        for (int i = 0; i < equippedItems.Count; i++)
+        {
+            ItemInstance item = equippedItems[i];
+
+            if (item == null || item.Definition == null)
             {
                 continue;
             }
 
-            bool effectApplied = ApplyEffect(effects[i]);
+            if (!item.Definition.CanBeUsedDirectly)
+            {
+                continue;
+            }
 
-            if (effectApplied)
+            foundActiveItem = true;
+
+            string failureMessage;
+
+            if (!item.CanUse(out failureMessage))
+            {
+                if (string.IsNullOrWhiteSpace(firstFailureMessage))
+                {
+                    firstFailureMessage = failureMessage;
+                }
+
+                continue;
+            }
+
+            return TryUseItemInternal(item, true);
+        }
+
+        if (!foundActiveItem)
+        {
+            GameMessageLog.Write("You have no equipped active item.");
+            return false;
+        }
+
+        GameMessageLog.Write(firstFailureMessage);
+        return false;
+    }
+
+    public void OnPlayerActionCompleted()
+    {
+        TickAllItemCooldowns();
+    }
+
+    private bool TryUseItemInternal(ItemInstance itemInstance, bool fromEquipment)
+    {
+        string failureMessage;
+
+        if (!itemInstance.CanUse(out failureMessage))
+        {
+            GameMessageLog.Write(failureMessage);
+            return false;
+        }
+
+        bool usedConsumableEffect = ApplyConsumableEffects(itemInstance);
+        bool usedSpecialEffect = ApplySpecialUseEffects(itemInstance);
+
+        bool usedSuccessfully = usedConsumableEffect || usedSpecialEffect;
+
+        if (!usedSuccessfully)
+        {
+            GameMessageLog.Write(itemInstance.GetDisplayName() + " has no useful effect right now.");
+            return false;
+        }
+
+        SpendItemUse(itemInstance, fromEquipment);
+        return true;
+    }
+
+    private void SpendItemUse(ItemInstance itemInstance, bool fromEquipment)
+    {
+        itemInstance.SpendUse();
+
+        if (itemInstance.Definition.ConsumeOnUse)
+        {
+            RemoveUsedItem(itemInstance, fromEquipment);
+            return;
+        }
+
+        if (itemInstance.ShouldBeRemovedBecauseChargesEmpty())
+        {
+            GameMessageLog.Write(itemInstance.GetDisplayName() + " crumbles after its last charge is spent.");
+            RemoveUsedItem(itemInstance, fromEquipment);
+        }
+    }
+
+    private void RemoveUsedItem(ItemInstance itemInstance, bool fromEquipment)
+    {
+        if (fromEquipment)
+        {
+            actorEquipment.RemoveEquippedItem(itemInstance);
+            return;
+        }
+
+        actorInventory.RemoveQuantity(itemInstance, 1);
+    }
+
+    private void TickAllItemCooldowns()
+    {
+        HashSet<ItemInstance> tickedItems = new HashSet<ItemInstance>();
+
+        for (int i = 0; i < actorInventory.Items.Count; i++)
+        {
+            ItemInstance item = actorInventory.Items[i];
+
+            if (item == null)
+            {
+                continue;
+            }
+
+            if (tickedItems.Add(item))
+            {
+                item.TickUseCooldown();
+            }
+        }
+
+        IReadOnlyList<ItemInstance> equippedItems = actorEquipment.GetEquippedItems();
+
+        for (int i = 0; i < equippedItems.Count; i++)
+        {
+            ItemInstance item = equippedItems[i];
+
+            if (item == null)
+            {
+                continue;
+            }
+
+            if (tickedItems.Add(item))
+            {
+                item.TickUseCooldown();
+            }
+        }
+    }
+
+    private bool ApplyConsumableEffects(ItemInstance itemInstance)
+    {
+        bool appliedAnyEffect = false;
+
+        if (itemInstance.Definition.ConsumableEffects == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < itemInstance.Definition.ConsumableEffects.Count; i++)
+        {
+            ConsumableEffect effect = itemInstance.Definition.ConsumableEffects[i];
+
+            if (effect == null)
+            {
+                continue;
+            }
+
+            bool applied = ApplySingleConsumableEffect(effect);
+
+            if (applied)
             {
                 appliedAnyEffect = true;
             }
@@ -87,56 +248,62 @@ public class ActorItemUser : MonoBehaviour
         return appliedAnyEffect;
     }
 
-    private bool ApplyEffect(ConsumableEffect effect)
+    private bool ApplySingleConsumableEffect(ConsumableEffect effect)
     {
-        if (effect.EffectType == ConsumableEffectType.HealHealth)
+        string effectName = effect.EffectType.ToString();
+
+        if (MatchesEffectName(effectName, "Heal") ||
+            MatchesEffectName(effectName, "Health") ||
+            MatchesEffectName(effectName, "RestoreHealth"))
         {
-            return ApplyHealHealth(effect.Value);
+            if (actorHealth == null)
+            {
+                return false;
+            }
+
+            return actorHealth.Heal(effect.Value);
         }
 
-        if (effect.EffectType == ConsumableEffectType.RestoreHunger)
+        if (MatchesEffectName(effectName, "Hunger") ||
+            MatchesEffectName(effectName, "Food") ||
+            MatchesEffectName(effectName, "RestoreHunger"))
         {
-            return ApplyRestoreHunger(effect.Value);
+            if (actorSurvival == null)
+            {
+                return false;
+            }
+
+            return actorSurvival.RestoreHunger(effect.Value);
         }
 
-        if (effect.EffectType == ConsumableEffectType.RestoreThirst)
+        if (MatchesEffectName(effectName, "Thirst") ||
+            MatchesEffectName(effectName, "Water") ||
+            MatchesEffectName(effectName, "RestoreThirst"))
         {
-            return ApplyRestoreThirst(effect.Value);
+            if (actorSurvival == null)
+            {
+                return false;
+            }
+
+            return actorSurvival.RestoreThirst(effect.Value);
         }
 
+        GameMessageLog.Write("Nothing happens.");
         return false;
     }
 
-    private bool ApplyHealHealth(int amount)
+    private bool ApplySpecialUseEffects(ItemInstance itemInstance)
     {
-        if (actorHealth == null)
+        if (specialEffectHandler == null)
         {
-            Debug.LogWarning(gameObject.name + " cannot be healed because it has no ActorHealth component.");
             return false;
         }
 
-        return actorHealth.Heal(amount);
+        return specialEffectHandler.ApplyItemUseEffects(itemInstance);
     }
 
-    private bool ApplyRestoreHunger(int amount)
+    private bool MatchesEffectName(string effectName, string expectedName)
     {
-        if (actorSurvival == null)
-        {
-            Debug.LogWarning(gameObject.name + " cannot restore hunger because it has no ActorSurvival component.");
-            return false;
-        }
-
-        return actorSurvival.RestoreHunger(amount);
-    }
-
-    private bool ApplyRestoreThirst(int amount)
-    {
-        if (actorSurvival == null)
-        {
-            Debug.LogWarning(gameObject.name + " cannot restore thirst because it has no ActorSurvival component.");
-            return false;
-        }
-
-        return actorSurvival.RestoreThirst(amount);
+        return string.Equals(effectName, expectedName, StringComparison.OrdinalIgnoreCase);
     }
 }

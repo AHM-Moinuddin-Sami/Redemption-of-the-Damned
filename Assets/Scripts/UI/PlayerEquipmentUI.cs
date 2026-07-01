@@ -97,6 +97,7 @@ public class PlayerEquipmentUI : MonoBehaviour
         AppendSlot(builder, "Feet", EquipmentSlotType.Feet);
         AppendSlot(builder, "Neck", EquipmentSlotType.Neck);
         AppendSlot(builder, "Ring", EquipmentSlotType.Ring);
+        AppendSlot(builder, "Trinket", EquipmentSlotType.Trinket);
 
         return builder.ToString();
     }
@@ -115,6 +116,17 @@ public class PlayerEquipmentUI : MonoBehaviour
         }
 
         builder.AppendLine(ItemTextFormatter.FormatItemName(item));
+
+        string useStateText = item.GetUseStateText();
+
+        if (!string.IsNullOrWhiteSpace(useStateText))
+        {
+            builder.Append(" (");
+            builder.Append(useStateText);
+            builder.Append(")");
+        }
+
+        builder.AppendLine();
     }
 
     private void UnsubscribeFromEquipment()

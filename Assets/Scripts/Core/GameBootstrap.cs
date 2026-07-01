@@ -74,6 +74,9 @@ public class GameBootstrap : MonoBehaviour
     [SerializeField] private ItemLootProfile itemLootProfile;
     [SerializeField] private ItemGenerationProfile itemGenerationProfile;
 
+    [Header("Loot Drop Placement")]
+    [SerializeField] private int enemyLootDropSpreadRadius = 2;
+
     [Header("Scene References")]
     [SerializeField] private CameraFollowTarget cameraFollowTarget;
     [SerializeField] private Transform actorParent;
@@ -332,6 +335,13 @@ public class GameBootstrap : MonoBehaviour
         if (stealthController != null)
         {
             stealthController.Initialize(turnManager);
+        }
+
+        PlayerEquippedActiveItemController equippedActiveController = currentPlayer.GetComponent<PlayerEquippedActiveItemController>();
+
+        if (equippedActiveController != null)
+        {
+            equippedActiveController.Initialize(turnManager);
         }
     }
 
@@ -636,6 +646,12 @@ public class GameBootstrap : MonoBehaviour
             return;
         }
 
+        AwardEnemyExperience(enemyHealth);
+        DropEnemyLoot(enemyHealth);
+    }
+
+    private void AwardEnemyExperience(ActorHealth enemyHealth)
+    {
         if (currentPlayerExperience == null)
         {
             return;
@@ -649,5 +665,220 @@ public class GameBootstrap : MonoBehaviour
         }
 
         currentPlayerExperience.AddExperience(experienceReward.ExperienceAmount);
+    }
+
+    private void DropEnemyLoot(ActorHealth enemyHealth)
+    {
+        EnemyDeathLoot enemyDeathLoot = enemyHealth.GetComponent<EnemyDeathLoot>();
+
+        if (enemyDeathLoot == null)
+        {
+            return;
+        }
+
+        ActorGridEntity enemyActor = enemyHealth.GetComponent<ActorGridEntity>();
+
+        if (enemyActor == null)
+        {
+            return;
+        }
+
+        System.Random random = CreateEnemyLootRandom(enemyActor.GridPosition);
+
+        DropEnemyGuaranteedLoot(enemyDeathLoot, enemyActor.GridPosition, random);
+        DropEnemyRandomLoot(enemyDeathLoot, enemyActor.GridPosition, random);
+    }
+
+    private void DropEnemyGuaranteedLoot(
+        EnemyDeathLoot enemyDeathLoot,
+        Vector2Int dropPosition,
+        System.Random random)
+    {
+        List<ItemDropResult> guaranteedDropResults = enemyDeathLoot.RollGuaranteedDropResults(random);
+
+        for (int i = 0; i < guaranteedDropResults.Count; i++)
+        {
+            SpawnDropResultAtPosition(dropPosition, guaranteedDropResults[i], random);
+        }
+    }
+
+    private void DropEnemyRandomLoot(
+        EnemyDeathLoot enemyDeathLoot,
+        Vector2Int dropPosition,
+        System.Random random)
+    {
+        int dropCount = enemyDeathLoot.RollRandomDropCount(random);
+
+        for (int i = 0; i < dropCount; i++)
+        {
+            ItemDropResult dropResult = enemyDeathLoot.RollRandomDropResult(
+                currentFloorNumber,
+                random,
+                itemLootProfile,
+                floorLootTable
+            );
+
+            SpawnDropResultAtPosition(dropPosition, dropResult, random);
+        }
+    }
+
+    private void SpawnDropResultAtPosition(
+        Vector2Int dropPosition,
+        ItemDropResult dropResult,
+        System.Random random)
+    {
+        ItemInstance itemInstance = CreateGeneratedItemInstance(dropResult, random);
+
+        if (itemInstance == null)
+        {
+            return;
+        }
+
+        SpawnDroppedItemAt(dropPosition, itemInstance);
+    }
+
+    private System.Random CreateEnemyLootRandom(Vector2Int gridPosition)
+    {
+        int seed =
+            System.Environment.TickCount ^
+            currentFloorNumber * 397 ^
+            gridPosition.x * 73856093 ^
+            gridPosition.y * 19349663;
+
+        return new System.Random(seed);
+    }
+
+    private bool SpawnDroppedItemAt(Vector2Int gridPosition, ItemInstance itemInstance)
+    {
+        if (itemPrefab == null)
+        {
+            return false;
+        }
+
+        if (itemInstance == null || itemInstance.Definition == null)
+        {
+            return false;
+        }
+
+        Vector2Int dropPosition;
+
+        if (!TryFindBestDropPositionNear(gridPosition, out dropPosition))
+        {
+            return false;
+        }
+
+        ItemGridEntity item = Instantiate(itemPrefab, itemParent);
+
+        bool placed = item.Initialize(
+            currentMapData,
+            mapRenderer,
+            dropPosition,
+            itemInstance
+        );
+
+        if (!placed)
+        {
+            Destroy(item.gameObject);
+            return false;
+        }
+
+        spawnedItems.Add(item);
+        RegisterGeneratedUniqueItem(itemInstance);
+
+        return true;
+    }
+
+    private bool TryFindBestDropPositionNear(Vector2Int origin, out Vector2Int bestPosition)
+    {
+        bestPosition = origin;
+
+        if (currentMapData == null)
+        {
+            return false;
+        }
+
+        List<Vector2Int> candidatePositions = GetDropCandidatePositions(origin, enemyLootDropSpreadRadius);
+
+        bool foundPosition = false;
+        int bestScore = int.MaxValue;
+
+        for (int i = 0; i < candidatePositions.Count; i++)
+        {
+            Vector2Int candidate = candidatePositions[i];
+
+            if (!IsValidDropPosition(candidate))
+            {
+                continue;
+            }
+
+            int score = GetDropPositionScore(origin, candidate);
+
+            if (score >= bestScore)
+            {
+                continue;
+            }
+
+            bestScore = score;
+            bestPosition = candidate;
+            foundPosition = true;
+        }
+
+        return foundPosition;
+    }
+
+    private List<Vector2Int> GetDropCandidatePositions(Vector2Int origin, int radius)
+    {
+        List<Vector2Int> candidatePositions = new List<Vector2Int>();
+
+        int safeRadius = Mathf.Max(0, radius);
+
+        for (int y = -safeRadius; y <= safeRadius; y++)
+        {
+            for (int x = -safeRadius; x <= safeRadius; x++)
+            {
+                Vector2Int candidate = origin + new Vector2Int(x, y);
+                candidatePositions.Add(candidate);
+            }
+        }
+
+        return candidatePositions;
+    }
+
+    private bool IsValidDropPosition(Vector2Int position)
+    {
+        if (currentMapData == null)
+        {
+            return false;
+        }
+
+        // This keeps drops off walls, closed doors, blocking features, and occupied actor cells.
+        return currentMapData.IsWalkable(position);
+    }
+
+    private int GetDropPositionScore(Vector2Int origin, Vector2Int candidate)
+    {
+        int itemCount = GetItemCountAt(candidate);
+        int distance = Mathf.Abs(origin.x - candidate.x) + Mathf.Abs(origin.y - candidate.y);
+
+        // Item count matters more than distance.
+        // This makes drops spread out before stacking heavily.
+        return itemCount * 100 + distance;
+    }
+
+    private int GetItemCountAt(Vector2Int position)
+    {
+        if (currentMapData == null)
+        {
+            return 0;
+        }
+
+        IReadOnlyList<ItemGridEntity> items = currentMapData.GetItemsAt(position);
+
+        if (items == null)
+        {
+            return 0;
+        }
+
+        return items.Count;
     }
 }

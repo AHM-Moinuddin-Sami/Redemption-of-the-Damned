@@ -7,16 +7,16 @@ using UnityEngine;
  *
  * This version:
  * - reads attack damage from ActorStats
+ * - allows equipped item special effects to modify outgoing damage
+ * - triggers equipped item effects on hit
+ * - triggers equipped item effects on kill
  * - writes visibility-aware attack messages
  * - emits combat noise so nearby enemies can investigate
  *
- * Current message examples:
- * - You attack Rat for 6 damage.
- * - Rat attacks you for 2 damage.
- * - Something attacks you for 2 damage.
- *
- * Current noise behavior:
- * - every successful attack emits combat noise from the attacker's position
+ * Current item special effect integration:
+ * - OnHit BonusDamage is applied before the target receives damage.
+ * - OnHit effects are triggered after a successful damage attempt.
+ * - OnKill effects are triggered if the target dies from the attack.
  *
  * Important:
  * Armor reduction and death messages are handled by ActorHealth.
@@ -33,11 +33,13 @@ public class ActorCombat : MonoBehaviour
 
     private ActorStats actorStats;
     private ActorGridEntity actorGridEntity;
+    private ActorItemSpecialEffectHandler specialEffectHandler;
 
     private void Awake()
     {
         actorStats = GetComponent<ActorStats>();
         actorGridEntity = GetComponent<ActorGridEntity>();
+        specialEffectHandler = GetComponent<ActorItemSpecialEffectHandler>();
     }
 
     public bool Attack(ActorGridEntity target)
@@ -61,11 +63,26 @@ public class ActorCombat : MonoBehaviour
         }
 
         int damage = GetAttackDamage();
+        damage = ApplyOutgoingDamageEffects(target, damage);
 
         WriteAttackMessage(target, damage);
         EmitAttackNoise();
 
-        return targetHealth.TakeDamage(damage);
+        bool damaged = targetHealth.TakeDamage(damage);
+
+        if (!damaged)
+        {
+            return false;
+        }
+
+        TriggerOnHitEffects(target);
+
+        if (targetHealth.IsDead)
+        {
+            TriggerOnKillEffects(target);
+        }
+
+        return true;
     }
 
     private int GetAttackDamage()
@@ -83,6 +100,36 @@ public class ActorCombat : MonoBehaviour
         }
 
         return attackDamage;
+    }
+
+    private int ApplyOutgoingDamageEffects(ActorGridEntity target, int baseDamage)
+    {
+        if (specialEffectHandler == null)
+        {
+            return baseDamage;
+        }
+
+        return specialEffectHandler.ModifyOutgoingAttackDamage(target, baseDamage);
+    }
+
+    private void TriggerOnHitEffects(ActorGridEntity target)
+    {
+        if (specialEffectHandler == null)
+        {
+            return;
+        }
+
+        specialEffectHandler.OnHitTarget(target);
+    }
+
+    private void TriggerOnKillEffects(ActorGridEntity target)
+    {
+        if (specialEffectHandler == null)
+        {
+            return;
+        }
+
+        specialEffectHandler.OnKilledTarget(target);
     }
 
     private void EmitAttackNoise()

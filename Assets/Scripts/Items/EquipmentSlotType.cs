@@ -1,21 +1,9 @@
 /*
  * EquipmentSlotType
  * -----------------
- * Defines which equipment slot an item can be equipped into.
+ * Defines equipment slots an actor can use.
  *
- * This is not used for actual equipment yet.
- * It is added now so ItemDefinition can already store equipment-related data.
- *
- * Current usage:
- * - ItemDefinition stores an equipment slot.
- * - Weapons, armor, and shields can declare where they belong.
- *
- * Later this will be used by:
- * - ActorEquipment
- * - equipment UI
- * - stat modifiers
- * - weapon rules
- * - two-handed weapon handling
+ * Trinket is for active/passive charm-style items.
  */
 
 public enum EquipmentSlotType
@@ -28,5 +16,6 @@ public enum EquipmentSlotType
     Hands,
     Feet,
     Neck,
-    Ring
+    Ring,
+    Trinket
 }

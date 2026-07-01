@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Item Generation Profile
   m_EditorClassIdentifier: Assembly-CSharp::ItemGenerationProfile
   affixTable: {fileID: 11400000, guid: a565f6d55d3985347ad31f75c3386446, type: 2}
-  magicChancePercent: 20
+  magicChancePercent: 95
   rareChancePercent: 5
   magicChanceBonusPerFloor: 1
   rareChanceBonusEveryFloors: 3
