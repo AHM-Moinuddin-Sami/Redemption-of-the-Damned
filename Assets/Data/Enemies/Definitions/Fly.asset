@@ -27,3 +27,14 @@ MonoBehaviour:
   wanderChancePercent: 45
   maxWanderDistanceFromHome: 6
   wanderDirectionAttempts: 4
+  canDropLoot: 1
+  deathDropChancePercent: 35
+  minDeathDrops: 0
+  maxDeathDrops: 1
+  deathLootTable: {fileID: 0}
+  useFloorLootProfileIfNoDeathTable: 1
+  guaranteedDeathDrops:
+  - itemDefinition: {fileID: 11400000, guid: e94151752c54f3c4f8217b1930bb5ac0, type: 2}
+    dropChancePercent: 100
+    minQuantity: 5
+    maxQuantity: 5

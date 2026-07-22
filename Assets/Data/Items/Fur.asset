@@ -10,17 +10,26 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a3bbf65faebe4f74698b94a64096d7eb, type: 3}
-  m_Name: Test Sword
+  m_Name: Fur
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
   displayName: Longsword
   description: A dildo for a rock golem
   iconSprite: {fileID: 1787695470, guid: e95949754615c9e47a8dcee9097b2b4b, type: 3}
-  category: 4
+  uniqueItem: 0
+  uniqueId: 
+  uniqueFlavorText: 
+  category: 0
+  canBeUsedDirectly: 0
+  consumeOnUse: 0
+  useCooldownTurns: 0
+  maxCharges: 0
+  consumeWhenChargesEmpty: 0
   stackable: 0
   maxStackSize: 1
-  equipmentSlot: 1
+  equipmentSlot: 0
   twoHanded: 0
   statModifiers:
   - statType: 1
     value: 3
+  specialEffects: []
   consumableEffects: []

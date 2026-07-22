@@ -10,17 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a3bbf65faebe4f74698b94a64096d7eb, type: 3}
-  m_Name: Test Shield
+  m_Name: Potion
   m_EditorClassIdentifier: Assembly-CSharp::ItemDefinition
-  displayName: Shield
-  description: foam
-  iconSprite: {fileID: -992526561, guid: e95949754615c9e47a8dcee9097b2b4b, type: 3}
-  category: 6
-  stackable: 0
-  maxStackSize: 1
-  equipmentSlot: 2
+  displayName: Health Potion
+  description: Vial of bloody cum
+  iconSprite: {fileID: -1172664667, guid: e95949754615c9e47a8dcee9097b2b4b, type: 3}
+  category: 3
+  stackable: 1
+  maxStackSize: 99
+  equipmentSlot: 0
   twoHanded: 0
-  statModifiers:
-  - statType: 2
-    value: 3
-  consumableEffects: []
+  statModifiers: []
+  consumableEffects:
+  - effectType: 0
+    value: 5
